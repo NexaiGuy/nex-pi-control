@@ -12,6 +12,9 @@ from .main import ShellSettings, create_app
 
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s", stream=sys.stdout)
+    # httpx/httpcore loggen elke aanvraag (tientallen per poll naar de Docker-proxy); enkel waarschuwingen tonen.
+    for noisy in ("httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
     s = ShellSettings()
     if not host_allowed(s.host):
         logging.error("Refused: hal-shell only listens on loopback, or a private LAN address with HAL_ALLOW_LAN=1")
