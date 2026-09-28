@@ -1,0 +1,8 @@
+[Unit]
+Description=Nex Pi Control command %i
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/hal-agent/bin/hal-cmd-run %i
+TimeoutStartSec=930

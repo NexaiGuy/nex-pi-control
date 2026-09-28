@@ -1,0 +1,11 @@
+{"device": "/dev/sda", "collected_at": 0, "exit_code": 0, "size_bytes": 1000204886016,
+ "smartctl": {"model_name": "Samsung SSD 870 EVO 1TB", "serial_number": "S6PTNM0R000001", "firmware_version": "SVT02B6Q",
+  "device": {"protocol": "ATA"}, "user_capacity": {"bytes": 1000204886016},
+  "smart_status": {"passed": true}, "temperature": {"current": 33}, "power_on_time": {"hours": 9981},
+  "ata_smart_attributes": {"table": [
+    {"id": 5, "name": "Reallocated_Sector_Ct", "raw": {"value": 0, "string": "0"}, "when_failed": ""},
+    {"id": 9, "name": "Power_On_Hours", "raw": {"value": 9981, "string": "9981"}},
+    {"id": 187, "name": "Reported_Uncorrect", "raw": {"value": 0, "string": "0"}},
+    {"id": 197, "name": "Current_Pending_Sector", "raw": {"value": 0, "string": "0"}},
+    {"id": 198, "name": "Offline_Uncorrectable", "raw": {"value": 0, "string": "0"}},
+    {"id": 199, "name": "UDMA_CRC_Error_Count", "raw": {"value": 4, "string": "4"}}]}}}

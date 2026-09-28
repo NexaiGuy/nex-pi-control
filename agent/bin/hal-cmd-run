@@ -1,0 +1,59 @@
+#!/opt/hal-agent/venv/bin/python
+"""Draait als root via hal-cmd@<id>.service. Voert enkel commando's uit die root in
+/etc/hal-agent/commands.yml heeft gedefinieerd. De app kiest enkel een id, nooit de inhoud."""
+
+import os
+import pwd
+import re
+import subprocess
+import sys
+
+import yaml
+
+CONFIG = "/etc/hal-agent/commands.yml"
+ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
+
+
+def main(argv):
+    if len(argv) != 2 or not ID_RE.match(argv[1]):
+        print("ERROR invalid command id")
+        return 2
+    st = os.stat(CONFIG)
+    if st.st_uid != 0 or st.st_mode & 0o022:
+        print("ERROR commands.yml must be owned by root and not writable by others")
+        return 2
+    with open(CONFIG, encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    cmd = next((c for c in data.get("commands") or [] if isinstance(c, dict) and c.get("id") == argv[1]), None)
+    if not cmd:
+        print("ERROR unknown command")
+        return 2
+    user = str(cmd.get("user") or data.get("default_user") or "root")
+    try:
+        pwd.getpwnam(user)
+    except KeyError:
+        print(f"ERROR user {user} does not exist")
+        return 2
+    if cmd.get("argv"):
+        run = [str(a) for a in cmd["argv"]]
+    elif cmd.get("shell"):
+        run = ["/bin/bash", "-c", str(cmd["shell"])]
+    else:
+        print("ERROR command has no argv or shell")
+        return 2
+    if user != "root":
+        run = ["/usr/sbin/runuser", "-u", user, "--", *run]
+    timeout = max(5, min(int(cmd.get("timeout", 120)), 900))
+    env = {"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C.UTF-8", "HOME": pwd.getpwnam(user).pw_dir}
+    print(f"Start: {cmd.get('name', argv[1])} (as {user})", flush=True)
+    try:
+        r = subprocess.run(run, stdin=subprocess.DEVNULL, env=env, cwd=cmd.get("cwd") or env["HOME"], timeout=timeout)
+    except subprocess.TimeoutExpired:
+        print(f"ERROR time limit of {timeout} s exceeded")
+        return 124
+    print(("Done" if r.returncode == 0 else f"ERROR exit code {r.returncode}"), flush=True)
+    return r.returncode
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

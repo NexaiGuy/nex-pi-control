@@ -1,0 +1,2 @@
+{"device": "/dev/sdb", "collected_at": 0, "exit_code": 4, "size_bytes": 2000398934016,
+ "smartctl": {"model_name": "WDC WD20EFRX", "serial_number": "WD-1", "user_capacity": {"bytes": 2000398934016}}}

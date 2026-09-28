@@ -1,0 +1,24 @@
+[Unit]
+Description=Nex Pi Control admin shell (terminal and files, off by default)
+Documentation=file:///opt/hal-agent/README.md
+After=network-online.target
+
+[Service]
+Type=simple
+User=@SHELL_USER@
+Group=@SHELL_GROUP@
+EnvironmentFile=/etc/hal-agent/shell.env
+Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 USER=@SHELL_USER@
+WorkingDirectory=/opt/hal-agent
+ExecStart=/opt/hal-agent/venv/bin/python -m hal_shell
+# Stops itself after 15 min without activity (exit 0); not restarted then.
+Restart=on-failure
+RestartSec=5
+RuntimeMaxSec=4h
+KillMode=control-group
+TimeoutStopSec=10
+# Deliberately no NoNewPrivileges: sudo in the terminal must work (with the password of @SHELL_USER@).
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+LimitNOFILE=4096
+MemoryMax=1G
+# No [Install] section: only started on request from the app.

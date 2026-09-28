@@ -1,0 +1,45 @@
+# Commands you can start from the app. The app only picks the id; the content lives here, owned by root.
+# Permissions: root:halagent 0640. After changes: sudo /opt/hal-agent/bin/hal-apply-config
+# Per command: id (a-z, 0-9, -), name, description, icon (Feather icon name), effect (shown in the confirmation),
+# dangerous (hold to confirm), timeout (s, max 900), user (defaults to default_user),
+# and either argv (list, recommended) or shell (string, run via bash -c).
+default_user: pi
+
+commands:
+  - id: apt-update
+    name: Refresh package lists
+    description: apt update, shows how many upgrades are waiting
+    icon: package
+    effect: Only re-reads the package lists. Nothing is installed.
+    user: root
+    timeout: 300
+    shell: "apt-get update -q && apt list --upgradable 2>/dev/null | tail -n +2"
+
+  - id: docker-prune
+    name: Docker clean-up
+    description: Removes unused images and build cache
+    icon: trash
+    effect: Unused images and build cache are permanently deleted. Running containers stay up.
+    dangerous: true
+    user: root
+    timeout: 600
+    argv: ["docker", "system", "prune", "-af", "--filter", "until=168h"]
+
+  - id: disk-report
+    name: Disk report
+    description: Largest folders under /var and /srv
+    icon: hard-drive
+    effect: Read-only, may take 10 to 30 seconds.
+    user: root
+    timeout: 120
+    shell: "du -xh --max-depth=2 /var /srv 2>/dev/null | sort -rh | head -n 25"
+
+  # Example: your own deploy script
+  # - id: deploy-site
+  #   name: Deploy website
+  #   description: Runs /usr/local/sbin/deploy-site
+  #   icon: upload-cloud
+  #   effect: The live site is replaced by the newest build.
+  #   user: root
+  #   timeout: 600
+  #   argv: ["/usr/local/sbin/deploy-site"]

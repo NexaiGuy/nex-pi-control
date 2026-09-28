@@ -1,0 +1,3 @@
+{"device": "/dev/sdd", "collected_at": 0, "exit_code": 8, "size_bytes": 1000204886016,
+ "smartctl": {"model_name": "ST1000DM003", "serial_number": "Z1D", "user_capacity": {"bytes": 1000204886016},
+  "smart_status": {"passed": false}}}

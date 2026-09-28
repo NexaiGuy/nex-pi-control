@@ -1,0 +1,44 @@
+# Alleen-lezen proxy voor de Docker API. Enkel GET op /containers, gebonden aan 127.0.0.1.
+# hal-agent leest nooit Env of Mounts: dat wordt in de agent zelf weggefilterd.
+name: hal-socket-proxy
+services:
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:v0.5.0
+    container_name: hal-docker-socket-proxy
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /run
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    environment:
+      CONTAINERS: "1"
+      POST: "0"
+      INFO: "0"
+      IMAGES: "0"
+      NETWORKS: "0"
+      VOLUMES: "0"
+      EXEC: "0"
+      SERVICES: "0"
+      TASKS: "0"
+      SECRETS: "0"
+      CONFIGS: "0"
+      PLUGINS: "0"
+      SYSTEM: "0"
+      BUILD: "0"
+      COMMIT: "0"
+      AUTH: "0"
+      SWARM: "0"
+      NODES: "0"
+      DISTRIBUTION: "0"
+      EVENTS: "0"
+      PING: "1"
+      VERSION: "1"
+      LOG_LEVEL: warning
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "127.0.0.1:2375:2375"
+    mem_limit: 64m

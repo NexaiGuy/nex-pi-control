@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Shows a one-time QR code with everything Nex Pi Control needs to connect. Nothing is stored.
+# Usage: sudo /opt/hal-agent/bin/hal-qr --api https://pi-api.example.com [--shell https://pi-shell.example.com]
+set -euo pipefail
+[[ $EUID -eq 0 ]] || { echo "Run with sudo." >&2; exit 1; }
+command -v qrencode >/dev/null || { echo "qrencode missing: sudo apt install -y qrencode" >&2; exit 1; }
+
+API_URL="${HAL_API_URL:-}"; SHELL_URL="${HAL_SHELL_URL:-}"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --api) API_URL="$2"; shift 2 ;;
+    --shell) SHELL_URL="$2"; shift 2 ;;
+    *) echo "Unknown option: $1" >&2; exit 2 ;;
+  esac
+done
+if [[ -z "$API_URL" || "$API_URL" == *"<"* ]]; then
+  read -r -p "API URL as the phone reaches it (e.g. https://pi-api.example.com): " API_URL
+fi
+if [[ -z "$SHELL_URL" || "$SHELL_URL" == *"<"* ]]; then
+  read -r -p "Admin shell URL (optional, Enter to skip): " SHELL_URL
+fi
+
+get() { grep -E "^$2=" "$1" | tail -n1 | cut -d= -f2-; }
+AGENT_TOKEN=$(get /etc/hal-agent/agent.env HAL_AGENT_TOKEN)
+SHELL_TOKEN=$(get /etc/hal-agent/shell.env HAL_SHELL_TOKEN)
+
+CF_ID=""; CF_SECRET=""
+if [[ -n "$(get /etc/hal-agent/agent.env CF_ACCESS_AUD)" ]]; then
+  echo "Cloudflare Access service token (input is hidden)."
+  read -r -p "Client ID: " CF_ID
+  read -r -s -p "Client Secret: " CF_SECRET; echo
+fi
+
+PAYLOAD=$(CF_ID="$CF_ID" CF_SECRET="$CF_SECRET" AGENT_TOKEN="$AGENT_TOKEN" SHELL_TOKEN="$SHELL_TOKEN" API_URL="$API_URL" SHELL_URL="$SHELL_URL" NAME="$(hostname)" \
+  /opt/hal-agent/venv/bin/python -c '
+import json, os
+e = os.environ
+print(json.dumps({"v": 1, "name": e["NAME"], "api": e["API_URL"].rstrip("/"), "shell": e["SHELL_URL"].rstrip("/"),
+  "cfId": e["CF_ID"], "cfSecret": e["CF_SECRET"], "agentToken": e["AGENT_TOKEN"], "shellToken": e["SHELL_TOKEN"]}, separators=(",", ":")))')
+
+clear
+echo "Scan this code in Nex Pi Control (Connect, or Settings > Connection). Press Enter when done."
+qrencode -t ansiutf8 -l M "$PAYLOAD"
+read -r _
+clear
+echo "QR code cleared. Never screenshot or share it: it contains your tokens."

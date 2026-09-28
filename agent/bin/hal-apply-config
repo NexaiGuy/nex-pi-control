@@ -1,0 +1,82 @@
+#!/opt/hal-agent/venv/bin/python
+"""Genereert de polkit-regel uit /etc/hal-agent/allowed-actions.yml en commands.yml.
+Draai na elke wijziging van die bestanden: sudo /opt/hal-agent/bin/hal-apply-config"""
+
+import json
+import os
+import re
+import sys
+
+import yaml
+
+CONF = "/etc/hal-agent"
+RULES = "/etc/polkit-1/rules.d/50-hal-agent.rules"
+UNIT_RE = re.compile(r"^[A-Za-z0-9@_.:\\-]{1,200}\.service$")
+ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
+
+TEMPLATE = """// Beheerd door hal-agent (hal-apply-config). Niet met de hand aanpassen.
+// Gebruiker halagent mag enkel deze vaste acties uitvoeren. Al de rest wordt geweigerd.
+polkit.addRule(function(action, subject) {
+    if (subject.user !== "halagent") {
+        return polkit.Result.NOT_HANDLED;
+    }
+    var restartUnits = %(restart)s;
+    var startUnits = %(start)s;
+    if (action.id === "org.freedesktop.systemd1.manage-units") {
+        var unit = action.lookup("unit");
+        var verb = action.lookup("verb");
+        if (verb === "restart" && restartUnits.indexOf(unit) >= 0) {
+            return polkit.Result.YES;
+        }
+        if (verb === "start" && startUnits.indexOf(unit) >= 0) {
+            return polkit.Result.YES;
+        }
+        if (verb === "stop" && unit === "hal-shell.service") {
+            return polkit.Result.YES;
+        }
+        return polkit.Result.NO;
+    }
+    if (%(power)s && (action.id === "org.freedesktop.login1.reboot" ||
+        action.id === "org.freedesktop.login1.reboot-multiple-sessions" ||
+        action.id === "org.freedesktop.login1.power-off" ||
+        action.id === "org.freedesktop.login1.power-off-multiple-sessions")) {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NO;
+});
+"""
+
+
+def load(name):
+    try:
+        with open(os.path.join(CONF, name), encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        return {}
+
+
+def main():
+    actions = load("allowed-actions.yml")
+    commands = load("commands.yml")
+    restart = []
+    for u in actions.get("restart") or []:
+        name = u if str(u).endswith(".service") else f"{u}.service"
+        if UNIT_RE.match(name) and not name.startswith(("hal-agent", "polkit", "dbus", "systemd-logind", "ssh")):
+            restart.append(name)
+    start = ["hal-shell.service"]
+    for c in commands.get("commands") or []:
+        if isinstance(c, dict) and ID_RE.match(str(c.get("id", ""))):
+            start.append(f"hal-cmd@{c['id']}.service")
+    power = "true" if actions.get("power", True) else "false"
+    content = TEMPLATE % {"restart": json.dumps(sorted(set(restart))), "start": json.dumps(sorted(set(start))), "power": power}
+    tmp = RULES + ".tmp"
+    with open(tmp, "w") as f:
+        f.write(content)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, RULES)
+    print(f"polkit rule updated: {len(restart)} restartable services, {len(start)} startable units, power={power}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

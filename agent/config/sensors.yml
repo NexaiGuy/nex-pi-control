@@ -1,0 +1,14 @@
+# Sensors. Types:
+#   ds18b20: 1-wire (dtoverlay=w1-gpio in /boot/firmware/config.txt), device: 28-xxxxxxxxxxxx
+#   dht:     DHT11/DHT22 via kernel driver (dtoverlay=dht11,gpiopin=4), iio_device: iio:device0
+#   bmp280:  I2C (dtparam=i2c_arm=on), bus: 1, address: 0x76 or 0x77
+# The app also shows which devices were discovered, so you can fill in the right id.
+sensors: []
+#  - id: rack
+#    name: Server rack
+#    type: dht
+#    iio_device: "iio:device0"
+#  - id: outside
+#    name: Outside
+#    type: ds18b20
+#    device: 28-3c01d607a1b2

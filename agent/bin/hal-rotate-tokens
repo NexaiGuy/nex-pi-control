@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Generates new agent and shell tokens and restarts the agent. The old tokens stop working immediately.
+# Usage: sudo /opt/hal-agent/bin/hal-rotate-tokens
+set -euo pipefail
+[[ $EUID -eq 0 ]] || { echo "Run with sudo." >&2; exit 1; }
+gen() { /opt/hal-agent/venv/bin/python -c 'import secrets; print(secrets.token_urlsafe(48))'; }
+set_kv() {
+  if grep -q "^$2=" "$1"; then sed -i "s#^$2=.*#$2=$3#" "$1"; else echo "$2=$3" >> "$1"; fi
+}
+set_kv /etc/hal-agent/agent.env HAL_AGENT_TOKEN "$(gen)"
+set_kv /etc/hal-agent/shell.env HAL_SHELL_TOKEN "$(gen)"
+systemctl restart hal-agent.service
+systemctl stop hal-shell.service 2>/dev/null || true
+cat <<'MSG'
+New tokens are active. They are not printed.
+Reconnect the app with a fresh QR code:  sudo /opt/hal-agent/bin/hal-qr
+Lost your phone? Also revoke the Cloudflare Access service token in Zero Trust.
+MSG

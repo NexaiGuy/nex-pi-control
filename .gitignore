@@ -1,0 +1,35 @@
+# Secrets: never commit
+keys/
+*.jks
+*.keystore
+signing.env
+*.env
+
+# Build output
+releases/
+node_modules/
+.expo/
+app/android/
+app/ios/
+app/dist/
+*.apk
+*.aab
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Local notes
+HAL-Control-prompts.md
+store/private/
+.DS_Store
+private/
+
+# Materiaal enkel voor Nex AI (Play Console, website)
+store/
+website/
+design/
+.hal-*.tgz

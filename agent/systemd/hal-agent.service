@@ -1,0 +1,50 @@
+[Unit]
+Description=Nex Pi Control agent (monitoring API)
+Documentation=file:///opt/hal-agent/README.md
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=halagent
+Group=halagent
+EnvironmentFile=/etc/hal-agent/agent.env
+Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+WorkingDirectory=/opt/hal-agent
+ExecStart=/opt/hal-agent/venv/bin/python -m hal_agent
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+# Sandbox. The agent never needs sudo: privileged actions go through polkit and fixed units.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/hal-agent
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+SystemCallArchitectures=native
+UMask=0077
+# GPIO and I2C devices are allowed one by one in the drop-in 10-hardware.conf (setup.sh)
+DevicePolicy=closed
+LimitNOFILE=4096
+MemoryMax=384M
+CPUQuota=60%
+
+[Install]
+WantedBy=multi-user.target

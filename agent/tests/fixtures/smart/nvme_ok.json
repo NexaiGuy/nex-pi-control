@@ -1,0 +1,5 @@
+{"device": "/dev/nvme0n1", "collected_at": 0, "exit_code": 0, "size_bytes": 500107862016,
+ "smartctl": {"model_name": "Samsung SSD 980 PRO 500GB", "serial_number": "S5GX1", "firmware_version": "5B2QGXA7",
+  "device": {"protocol": "NVMe"}, "user_capacity": {"bytes": 500107862016}, "smart_status": {"passed": true},
+  "nvme_smart_health_information_log": {"critical_warning": 0, "temperature": 41, "available_spare": 100,
+   "available_spare_threshold": 10, "percentage_used": 3, "media_errors": 0, "power_on_hours": 6120}}}

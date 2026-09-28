@@ -1,0 +1,95 @@
+{
+  "expo": {
+    "name": "Nex Pi Control",
+    "slug": "nex-pi-control",
+    "scheme": "nexpicontrol",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0B0B12",
+    "primaryColor": "#8B5CF6",
+    "newArchEnabled": true,
+    "android": {
+      "package": "be.nexai.picontrol",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#0B0B12",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "allowBackup": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.INTERNET"
+      ],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "com.google.android.gms.permission.AD_ID"
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "be.nexai.picontrol",
+      "supportsTablet": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-font",
+        {
+          "fonts": []
+        }
+      ],
+      "expo-background-task",
+      "expo-sharing",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0B0B12",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Nex Pi Control only uses the camera to scan the QR code with your connection details.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Nex Pi Control uses biometrics to unlock the app."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#8B5CF6"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      "./plugins/withReleaseSigning",
+      "expo-localization"
+    ],
+    "experiments": {
+      "typedRoutes": false
+    },
+    "description": "Free Raspberry Pi monitor and manager by Nex AI."
+  }
+}

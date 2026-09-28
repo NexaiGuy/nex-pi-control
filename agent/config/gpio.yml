@@ -1,0 +1,8 @@
+# Which GPIO pins (BCM numbers) may the app switch?
+# Pins used by the kernel or a HAT always stay protected (for example I2C on 2 and 3).
+allowed_pins: [17, 27, 22, 23, 24, 25, 5, 6, 16, 26]
+
+# Optional names shown in the app
+labels:
+  17: Relay 1
+  27: Status LED

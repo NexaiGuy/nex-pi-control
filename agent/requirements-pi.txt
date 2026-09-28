@@ -1,0 +1,2 @@
+# Enkel op de Pi: GPIO via libgpiod v2. Als dit faalt, werkt al de rest gewoon (GPIO toont dan "niet beschikbaar").
+gpiod==2.4.3

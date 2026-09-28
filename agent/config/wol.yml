@@ -1,0 +1,7 @@
+# Devices you can wake with Wake-on-LAN. The app only picks the id.
+devices: []
+#  - id: desktop
+#    name: Desktop PC
+#    mac: "AA:BB:CC:DD:EE:FF"
+#    broadcast: 192.168.1.255
+#    port: 9

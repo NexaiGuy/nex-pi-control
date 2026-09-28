@@ -1,0 +1,5 @@
+# Public hostnames to check. On first install setup.sh fills this from /etc/cloudflared/*.yml (read-only).
+# Add "path" for a specific health check URL, and "local" for the origin behind it.
+sites: []
+#  - hostname: home.example.com
+#    local: http://127.0.0.1:8123

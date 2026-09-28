@@ -1,0 +1,16 @@
+# Folders the file manager in the app may show (mode ro) or change (mode rw).
+# hal-shell runs as your own user, so normal Linux permissions apply on top of this list.
+# setup.sh replaces /home/pi with the home folder of the user that ran it.
+roots:
+  - path: /home/pi
+    label: Home
+    mode: rw
+  - path: /var/www
+    label: Websites
+    mode: ro
+  - path: /etc
+    label: System config
+    mode: ro
+  - path: /var/log
+    label: Logs
+    mode: ro

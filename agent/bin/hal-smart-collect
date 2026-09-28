@@ -1,0 +1,68 @@
+#!/opt/hal-agent/venv/bin/python
+"""Draait als root via hal-smart-collect.timer. Leest SMART (enkel leescommando's) en schrijft JSON
+naar /var/lib/hal-agent/smart/<schijf>.json (root:halagent 0640). hal-agent leest die bestanden."""
+
+import grp
+import json
+import os
+import subprocess
+import sys
+import time
+
+OUT = "/var/lib/hal-agent/smart"
+ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C.UTF-8"}
+SMARTCTL = "/usr/sbin/smartctl"
+
+
+def disks():
+    r = subprocess.run(["lsblk", "-J", "-b", "-d", "-o", "NAME,TYPE,SIZE,TRAN,MODEL"], capture_output=True, text=True, env=ENV, timeout=20)
+    data = json.loads(r.stdout or "{}")
+    for d in data.get("blockdevices", []):
+        name = d.get("name", "")
+        if d.get("type") != "disk" or name.startswith(("zram", "loop", "ram")):
+            continue
+        yield name, int(d.get("size") or 0), (d.get("model") or "").strip(), d.get("tran")
+
+
+def smart(dev, extra=()):
+    argv = [SMARTCTL, "-j", "-i", "-H", "-A", "-l", "error", *extra, f"/dev/{dev}"]
+    r = subprocess.run(argv, capture_output=True, text=True, env=ENV, timeout=60)
+    try:
+        return r.returncode, json.loads(r.stdout or "{}")
+    except ValueError:
+        return r.returncode, {}
+
+
+def main():
+    os.makedirs(OUT, exist_ok=True)
+    try:
+        gid = grp.getgrnam("halagent").gr_gid
+    except KeyError:
+        gid = 0
+    seen = set()
+    for name, size, model, tran in disks():
+        seen.add(name)
+        record = {"device": f"/dev/{name}", "collected_at": int(time.time()), "size_bytes": size, "model": model, "transport": tran}
+        if name.startswith("mmcblk"):
+            record.update({"unsupported": True, "exit_code": 0, "smartctl": {}})
+        else:
+            code, data = smart(name)
+            if code & 0b10 and tran == "usb":  # USB-bridge: probeer SAT-passthrough
+                code, data = smart(name, ("-d", "sat"))
+            unsupported = bool(code & 0b10) and not data.get("smart_status")
+            record.update({"exit_code": code, "smartctl": data, "unsupported": unsupported})
+        path = os.path.join(OUT, f"{name}.json")
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(record, f)
+        os.chown(tmp, 0, gid)
+        os.chmod(tmp, 0o640)
+        os.replace(tmp, path)
+    for f in os.listdir(OUT):
+        if f.endswith(".json") and f[:-5] not in seen:
+            os.unlink(os.path.join(OUT, f))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

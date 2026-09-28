@@ -1,0 +1,13 @@
+# Which actions may the app perform? After every change run:
+#   sudo /opt/hal-agent/bin/hal-apply-config
+# That rewrites the polkit rule. The agent also reads this file itself (double check).
+
+# Services you may restart from the app (with or without .service)
+restart:
+  - nginx
+  - docker
+  # - home-assistant
+  # - pihole-FTL
+
+# Reboot and power off from the app (always hold 2 s and confirm with the server name)
+power: true

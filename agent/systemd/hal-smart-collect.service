@@ -1,0 +1,20 @@
+[Unit]
+Description=Nex Pi Control SMART collector (read only)
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/hal-agent/bin/hal-smart-collect
+TimeoutStartSec=300
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/hal-agent/smart
+PrivateNetwork=yes
+PrivateTmp=yes
+RestrictAddressFamilies=AF_UNIX
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+LockPersonality=yes

@@ -1,0 +1,3 @@
+{"device": "/dev/sdc", "collected_at": 0, "exit_code": 0, "size_bytes": 2000398934016,
+ "smartctl": {"model_name": "Generic USB SSD", "serial_number": "FAKE1", "user_capacity": {"bytes": 128035676160},
+  "smart_status": {"passed": true}}}
