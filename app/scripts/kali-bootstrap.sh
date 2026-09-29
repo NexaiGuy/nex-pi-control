@@ -19,7 +19,8 @@ die()  { printf '\033[31mFOUT\033[0m %s\n' "$*" >&2; exit 1; }
 # 1. Systeempakketten ----------------------------------------------------------------------
 info "Systeempakketten controleren"
 PKGS=(unzip curl rsync adb)
-command -v node >/dev/null 2>&1 || PKGS+=(nodejs npm)
+command -v node >/dev/null 2>&1 || PKGS+=(nodejs)
+command -v npm >/dev/null 2>&1 || PKGS+=(npm)
 JDK_PKG=""
 for v in 17 21; do
   if apt-cache show "openjdk-$v-jdk-headless" >/dev/null 2>&1; then JDK_PKG="openjdk-$v-jdk-headless"; break; fi
@@ -77,7 +78,7 @@ if [[ ! -f "$KEYS/halcontrol-release.jks" ]]; then
   cat > "$KEYS/signing.env" <<EOF
 # Release-signing (upload key voor Google Play). Bewaar deze map (keys/) veilig en maak een backup.
 # Zonder deze keystore kan je de app niet meer updaten, enkel verwijderen en opnieuw installeren.
-HAL_KEYSTORE_PATH=$KEYS/halcontrol-release.jks
+HAL_KEYSTORE_PATH="$KEYS/halcontrol-release.jks"
 HAL_KEYSTORE_PASSWORD=$PASS
 HAL_KEY_ALIAS=halcontrol
 HAL_KEY_PASSWORD=$PASS

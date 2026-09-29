@@ -58,6 +58,8 @@ gradle_release() {
   # shellcheck disable=SC1091
   source "$KEYS/signing.env"
   set +a
+  # Pad altijd vanuit keys/ zetten: werkt ook met oude signing.env zonder aanhalingstekens.
+  export HAL_KEYSTORE_PATH="$KEYS/halcontrol-release.jks"
   (cd android && ./gradlew --no-daemon "$1")
   unset HAL_KEYSTORE_PASSWORD HAL_KEY_PASSWORD
 }
