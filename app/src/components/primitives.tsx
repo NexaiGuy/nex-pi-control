@@ -1,10 +1,11 @@
 // Basiscomponenten: tekst, iconen, kaarten, knoppen, pills, chips, segmented control, voortgangsbalk.
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import type { ComponentProps, ReactNode } from 'react';
+import { useId, type ComponentProps, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, type StyleProp, type TextProps, type TextStyle, type ViewStyle } from 'react-native';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
-import { colors, fonts, levelColor, levelSoft, radius, space, touch, type, type Level } from '@/theme/tokens';
+import { colors, fonts, getTheme, type Level, levelColor, levelSoft, radius, space, themed, touch, type } from '@/theme/tokens';
 
 export type IconName = ComponentProps<typeof Feather>['name'];
 
@@ -53,6 +54,29 @@ export function SectionTitle({ children, right }: { children: ReactNode; right?:
 
 export function Row({ children, style, gap = space.sm }: { children: ReactNode; style?: StyleProp<ViewStyle>; gap?: number }) {
   return <View style={[{ flexDirection: 'row', alignItems: 'center', gap }, style]}>{children}</View>;
+}
+
+/**
+ * Dunne neonlijn (paars, magenta, cyaan). Het cyberpunk-accent van het lichte thema: enkel onder de header
+ * en boven de actieve tab. In het donkere thema tekent hij niets, daar blijft het ontwerp zoals het was.
+ */
+export function NeonLine({ height = 2, style }: { height?: number; style?: StyleProp<ViewStyle> }) {
+  const id = `neon${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+  if (getTheme() !== 'light') return null;
+  return (
+    <View style={[{ height, alignSelf: 'stretch', borderRadius: height }, style]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+      <Svg width="100%" height={height} preserveAspectRatio="none">
+        <Defs>
+          <LinearGradient id={id} x1="0" y1="0" x2="1" y2="0">
+            <Stop offset="0" stopColor={colors.neonA} />
+            <Stop offset="0.5" stopColor={colors.neonB} />
+            <Stop offset="1" stopColor={colors.neonC} />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100%" height={height} rx={height / 2} fill={`url(#${id})`} />
+      </Svg>
+    </View>
+  );
 }
 
 export function Divider() {
@@ -195,7 +219,7 @@ export function KeyValue({ k, v, mono = true }: { k: string; v: ReactNode; mono?
   );
 }
 
-export const s = StyleSheet.create({
+export const s = themed(() => StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -225,4 +249,4 @@ export const s = StyleSheet.create({
   segText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.textMuted },
   track: { backgroundColor: colors.surface3, overflow: 'hidden', width: '100%' },
   kv: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md, minHeight: 36 },
-});
+}));

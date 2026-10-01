@@ -1,0 +1,14 @@
+[Unit]
+Description=Nex Pi Control: check for system updates (installs nothing)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/hal-agent/bin/hal-apt-check
+TimeoutStartSec=900
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes

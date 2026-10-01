@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { colors, radius, space } from '@/theme/tokens';
+import { colors, radius, space, themed } from '@/theme/tokens';
 
 import { Icon, T } from './primitives';
 
@@ -36,7 +36,7 @@ export function ListGroup({ children }: { children: ReactNode }) {
   return <View style={lr.group}>{children}</View>;
 }
 
-const lr = StyleSheet.create({
+const lr = themed(() => StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 60, paddingHorizontal: space.lg, paddingVertical: space.sm },
   group: { backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.line, overflow: 'hidden' },
-});
+}));

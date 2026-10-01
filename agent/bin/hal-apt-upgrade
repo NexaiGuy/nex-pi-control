@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Draait als root via hal-apt-upgrade.service, enkel na bevestiging in de app.
+# Installeert de beschikbare updates (apt-get upgrade: nooit pakketten verwijderen, geen dist-upgrade)
+# en behoudt je eigen configuratiebestanden (confold). Daarna wordt de lijst opnieuw gecontroleerd.
+set -uo pipefail
+export DEBIAN_FRONTEND=noninteractive LANG=C LC_ALL=C PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+FREE_MB=$(df -Pm / | awk 'NR==2 {print $4}')
+if [[ -n "$FREE_MB" && "$FREE_MB" -lt 500 ]]; then
+  echo "ERROR less than 500 MB free on /, not starting"
+  exit 2
+fi
+echo "Start: apt-get update"
+apt-get update -q || echo "WARNING apt-get update reported errors, continuing with the current lists"
+echo "Start: apt-get upgrade"
+apt-get -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold upgrade
+RC=$?
+/opt/hal-agent/bin/hal-apt-check || true
+if [[ -f /var/run/reboot-required ]]; then echo "A reboot is required to finish the update"; fi
+if [[ $RC -eq 0 ]]; then echo "Done"; else echo "ERROR apt-get upgrade exit code $RC"; fi
+exit $RC

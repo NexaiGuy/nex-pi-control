@@ -1,0 +1,10 @@
+[Unit]
+Description=Nex Pi Control: install system updates (started from the app after confirmation)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/hal-agent/bin/hal-apt-upgrade
+TimeoutStartSec=3600
+KillMode=process

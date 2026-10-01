@@ -13,9 +13,12 @@ import { authenticate } from '@/features/lock/LockGate';
 import { ConnectionForm } from '@/features/onboarding/ConnectionForm';
 import { QrScanner } from '@/features/onboarding/QrScanner';
 import { t } from '@/i18n';
-import { DEFAULT_CONNECTION, connectionStore, prefsStore, saveConnection, savePrefs, serverName, wipeAll, type Connection, type Prefs } from '@/state/settings';
+import { ListGroup, ListRow } from '@/components/ListRow';
+import { activateServer } from '@/features/servers/ServerSwitcher';
+import { connectionStore, prefsStore, removeServer, saveConnection, savePrefs, serverName, serversStore, wipeAll, type Connection, type Prefs } from '@/state/settings';
+import { setThemeReturn } from '@/lib/themeReturn';
 import { useStore } from '@/state/store';
-import { colors, space } from '@/theme/tokens';
+import { colors, radius, space, type ThemePref } from '@/theme/tokens';
 
 function Stepper({ label, value, step, min, max, onChange }: { label: string; value: number; step: number; min: number; max: number; onChange: (v: number) => void }) {
   return (
@@ -36,14 +39,61 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
   return (
     <Row style={{ justifyContent: 'space-between', minHeight: 48 }}>
       <T style={{ flex: 1 }}>{label}</T>
-      <Switch value={value} onValueChange={onChange} trackColor={{ true: colors.purple, false: colors.surface3 }} thumbColor={colors.text} accessibilityLabel={label} />
+      <Switch value={value} onValueChange={onChange} trackColor={{ true: colors.purple, false: colors.surface3 }} thumbColor={colors.onAccent} accessibilityLabel={label} />
     </Row>
+  );
+}
+
+// Mini-voorbeeld van elk thema. Vaste kleuren: het voorbeeld toont het thema, niet het actieve thema.
+const SWATCH: Record<ThemePref, { bg: string; bars: string[]; line: string }> = {
+  system: { bg: '#F6F5FB', bars: ['#6D28D9', '#34F5C5'], line: '#0B0B12' },
+  dark: { bg: '#0B0B12', bars: ['#8B5CF6', '#34F5C5'], line: '#2A2A3D' },
+  light: { bg: '#F6F5FB', bars: ['#BE185D', '#047857'], line: '#E2DFEE' },
+};
+
+function ThemePicker({ value, onChange }: { value: ThemePref; onChange: (v: ThemePref) => void }) {
+  const opts: { k: ThemePref; label: string }[] = [
+    { k: 'system', label: t.settings.themeSystem },
+    { k: 'dark', label: t.settings.themeDark },
+    { k: 'light', label: t.settings.themeLight },
+  ];
+  return (
+    <View style={{ flexDirection: 'row', gap: space.sm }} accessibilityRole="radiogroup">
+      {opts.map(({ k, label }) => {
+        const on = value === k;
+        const sw = SWATCH[k];
+        return (
+          <Pressable
+            key={k}
+            onPress={() => onChange(k)}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: on }}
+            accessibilityLabel={t.settings.themeA11y(label)}
+            style={{
+              flex: 1, padding: space.sm, gap: 6, alignItems: 'center', borderRadius: radius.md, backgroundColor: colors.surface,
+              borderWidth: on ? 2 : 1, borderColor: on ? colors.cyan : colors.line, minHeight: 48,
+            }}
+          >
+            <View style={{ alignSelf: 'stretch', height: 52, borderRadius: radius.sm, backgroundColor: sw.bg, overflow: 'hidden', padding: 6, gap: 5, borderWidth: 1, borderColor: colors.line }}>
+              {k === 'system' ? <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '50%', backgroundColor: '#0B0B12' }} /> : null}
+              <View style={{ height: 6, borderRadius: 3, backgroundColor: sw.bars[0] }} />
+              <View style={{ height: 6, width: '60%', borderRadius: 3, backgroundColor: sw.bars[1] }} />
+              <View style={{ height: 6, borderRadius: 3, backgroundColor: sw.line }} />
+            </View>
+            <T v="caption" style={{ color: on ? colors.purple : colors.textMuted, }}>
+              {label}
+            </T>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
 export default function SettingsScreen() {
   const conn = useStore(connectionStore);
   const prefs = useStore(prefsStore);
+  const { servers, activeId } = useStore(serversStore);
   const qc = useQueryClient();
   const [draft, setDraft] = useState<Connection>(conn);
   const [unlocked, setUnlocked] = useState(false);
@@ -61,6 +111,19 @@ export default function SettingsScreen() {
 
   return (
     <DetailScreen title={t.settings.title}>
+      <SectionTitle>{t.settings.appearance}</SectionTitle>
+      <Card style={{ gap: space.sm }}>
+        <ThemePicker
+          value={prefs.theme}
+          onChange={(v) => {
+            if (v === prefs.theme) return;
+            setThemeReturn('/settings');
+            upd({ theme: v });
+          }}
+        />
+        <T v="caption">{t.settings.themeNote}</T>
+      </Card>
+
       <SectionTitle>{t.settings.connection}</SectionTitle>
       <Card style={{ gap: space.md }}>
         {conn.demo && !unlocked ? (
@@ -72,9 +135,12 @@ export default function SettingsScreen() {
               onPress={async () => {
                 cacheClear();
                 qc.clear();
-                await saveConnection(DEFAULT_CONNECTION);
-                await savePrefs({ onboarded: false });
-                router.replace('/onboarding');
+                const demo = serversStore.get().servers.find((x) => x.demo);
+                if (demo) await removeServer(demo.id);
+                if (!serversStore.get().servers.length) {
+                  await savePrefs({ onboarded: false });
+                  router.replace('/onboarding');
+                }
               }}
             />
           </>
@@ -118,6 +184,55 @@ export default function SettingsScreen() {
         )}
       </Card>
 
+      <SectionTitle right={<IconButton icon="plus" label={t.settings.addServer} onPress={() => router.push('/add-server')} />}>{t.settings.servers}</SectionTitle>
+      <ListGroup>
+        {servers.map((sv) => (
+          <ListRow
+            key={sv.id}
+            left={<Icon name={sv.demo ? 'play-circle' : 'cpu'} size={18} color={sv.id === activeId ? colors.purple : colors.textMuted} />}
+            title={serverName(sv)}
+            subtitle={sv.id === activeId ? t.settings.activeServer : undefined}
+            onPress={
+              sv.id === activeId
+                ? undefined
+                : () => {
+                    setThemeReturn('/settings');
+                    void activateServer(sv.id, qc);
+                  }
+            }
+            a11y={t.settings.switchTo(serverName(sv))}
+            right={
+              <IconButton
+                icon="trash-2"
+                label={`${t.settings.removeServer}: ${serverName(sv)}`}
+                color={colors.textMuted}
+                size={16}
+                onPress={() =>
+                  setConfirm({
+                    title: t.settings.removeServer,
+                    effect: t.settings.removeServerEffect(serverName(sv)),
+                    confirmLabel: t.settings.removeServer,
+                    dangerous: true,
+                    onConfirm: async () => {
+                      const wasActive = sv.id === serversStore.get().activeId;
+                      await removeServer(sv.id);
+                      if (wasActive) {
+                        cacheClear();
+                        qc.clear();
+                      }
+                      if (!serversStore.get().servers.length) {
+                        await savePrefs({ onboarded: false });
+                        router.replace('/onboarding');
+                      }
+                    },
+                  })
+                }
+              />
+            }
+          />
+        ))}
+      </ListGroup>
+
       <SectionTitle>{t.settings.thresholds}</SectionTitle>
       <Card>
         <Stepper label={t.settings.tempWarn} value={prefs.thresholds.tempC} step={1} min={50} max={85} onChange={(v) => upd({ thresholds: { ...prefs.thresholds, tempC: v } })} />
@@ -129,11 +244,11 @@ export default function SettingsScreen() {
 
       <SectionTitle>{t.settings.notifications}</SectionTitle>
       <Card>
-        {(['disk', 'service', 'site', 'temp', 'backup'] as const).map((k, i) => (
+        {(['disk', 'service', 'site', 'temp', 'backup', 'updates'] as const).map((k, i) => (
           <View key={k}>
             {i ? <Divider /> : null}
             <Toggle
-              label={{ disk: t.settings.notifyDisk, service: t.settings.notifyService, site: t.settings.notifySite, temp: t.settings.notifyTemp, backup: t.settings.notifyBackup }[k]}
+              label={{ disk: t.settings.notifyDisk, service: t.settings.notifyService, site: t.settings.notifySite, temp: t.settings.notifyTemp, backup: t.settings.notifyBackup, updates: t.settings.notifyUpdates }[k]}
               value={prefs.notify[k]}
               onChange={(v) => upd({ notify: { ...prefs.notify, [k]: v } })}
             />

@@ -3,18 +3,18 @@
     "name": "Nex Pi Control",
     "slug": "nex-pi-control",
     "scheme": "nexpicontrol",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "backgroundColor": "#0B0B12",
     "primaryColor": "#8B5CF6",
     "newArchEnabled": true,
     "android": {
       "package": "be.nexai.picontrol",
-      "versionCode": 1,
+      "versionCode": 2,
       "adaptiveIcon": {
-        "backgroundColor": "#0B0B12",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
@@ -85,7 +85,32 @@
         }
       ],
       "./plugins/withReleaseSigning",
-      "expo-localization"
+      "expo-localization",
+      [
+        "react-native-android-widget",
+        {
+          "fonts": [
+            "./node_modules/@expo-google-fonts/space-grotesk/700Bold/SpaceGrotesk_700Bold.ttf",
+            "./node_modules/@expo-google-fonts/jetbrains-mono/500Medium/JetBrainsMono_500Medium.ttf"
+          ],
+          "widgets": [
+            {
+              "name": "PiStatus",
+              "label": "Nex Pi Control",
+              "description": "Status, temperature, CPU and disk of your Pi",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "maxResizeWidth": "400dp",
+              "maxResizeHeight": "200dp",
+              "resizeMode": "horizontal|vertical",
+              "previewImage": "./assets/widget-preview.png",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": false

@@ -39,6 +39,8 @@ class Settings:
     backup_roots: list[Path]
     shell_url: str | None
     hostname_confirm: str
+    update_repo: str = "NexaiGuy/nex-pi-control"
+    update_check: bool = True
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -64,6 +66,8 @@ class Settings:
             backup_roots=[Path(p) for p in os.environ.get("HAL_AGENT_BACKUP_ROOTS", "/var/backups").split(":") if p],
             shell_url=os.environ.get("HAL_AGENT_SHELL_URL") or None,
             hostname_confirm=os.environ.get("HAL_AGENT_CONFIRM_NAME", ""),
+            update_repo=os.environ.get("HAL_UPDATE_REPO", "NexaiGuy/nex-pi-control"),
+            update_check=not os.environ.get("HAL_UPDATE_CHECK") or _bool(os.environ.get("HAL_UPDATE_CHECK")),
         )
 
 
@@ -111,7 +115,7 @@ class ConfigFiles:
 
     def __post_init__(self) -> None:
         d = self.config_dir
-        self.allowed_actions = YamlConfig(d / "allowed-actions.yml", {"restart": [], "power": True})
+        self.allowed_actions = YamlConfig(d / "allowed-actions.yml", {"restart": [], "power": True, "containers": True, "container_deny": [], "updates": True, "agent_update": True})
         self.commands = YamlConfig(d / "commands.yml", {"commands": []})
         self.wol = YamlConfig(d / "wol.yml", {"devices": []})
         self.sensors = YamlConfig(d / "sensors.yml", {"sensors": []})
@@ -129,6 +133,17 @@ class ConfigFiles:
                 if UNIT_RE.match(name):
                     out.append(name)
         return out
+
+    def allow(self, key: str) -> bool:
+        """Aan/uit-schakelaars in allowed-actions.yml: containers, updates, agent_update, power. Standaard aan."""
+        v = self.allowed_actions.get().get(key, True)
+        return v is True or (isinstance(v, str) and v.strip().lower() in ("true", "yes", "on", "1"))
+
+    def container_restart_allowed(self, name: str) -> bool:
+        if not self.allow("containers"):
+            return False
+        deny = {str(x) for x in (self.allowed_actions.get().get("container_deny") or []) if isinstance(x, str)}
+        return name not in deny
 
     def command_list(self) -> list[dict[str, Any]]:
         out = []

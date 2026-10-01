@@ -15,7 +15,7 @@ import { QrScanner } from '@/features/onboarding/QrScanner';
 import { t } from '@/i18n';
 import { LINKS } from '@/lib/links';
 import { DEMO_CONNECTION, DEFAULT_CONNECTION, connectionStore, isConfigured, saveConnection, savePrefs, type Connection } from '@/state/settings';
-import { colors, space } from '@/theme/tokens';
+import { colors, space, themed } from '@/theme/tokens';
 
 type Step = 0 | 1 | 2 | 3;
 
@@ -156,8 +156,8 @@ export default function Onboarding() {
   );
 }
 
-const o = StyleSheet.create({
+const o = themed(() => StyleSheet.create({
   root: { flexGrow: 1, paddingHorizontal: space.xl, gap: space.xl },
   step: { gap: space.md },
   logo: { width: 104, height: 104, borderRadius: 52, backgroundColor: colors.purpleSoft, alignItems: 'center', justifyContent: 'center' },
-});
+}));

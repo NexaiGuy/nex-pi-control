@@ -1,0 +1,62 @@
+#!/opt/hal-agent/venv/bin/python
+"""Draait als root via hal-container@<naam>.service. Herstart precies één bestaande container.
+Nooit stoppen, verwijderen of iets anders: enkel `docker restart`. De naam wordt streng gecontroleerd."""
+
+import os
+import re
+import shutil
+import subprocess
+import sys
+
+import yaml
+
+CONFIG = "/etc/hal-agent/allowed-actions.yml"
+NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$")
+ENV = {"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C.UTF-8"}
+
+
+def allowed(name: str) -> bool:
+    try:
+        st = os.stat(CONFIG)
+        if st.st_uid != 0 or st.st_mode & 0o022:
+            print("ERROR allowed-actions.yml must be owned by root and not writable by others")
+            return False
+        with open(CONFIG, encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        data = {}
+    if data.get("containers", True) is False:
+        print("ERROR container restarts are disabled in allowed-actions.yml")
+        return False
+    if name in {str(x) for x in (data.get("container_deny") or [])}:
+        print("ERROR this container is listed in container_deny")
+        return False
+    return True
+
+
+def main(argv):
+    if len(argv) != 2 or not NAME_RE.match(argv[1]):
+        print("ERROR invalid container name")
+        return 2
+    name = argv[1]
+    docker = shutil.which("docker", path=ENV["PATH"])
+    if not docker:
+        print("ERROR docker not found")
+        return 2
+    if not allowed(name):
+        return 2
+    r = subprocess.run([docker, "inspect", "--type", "container", "--format", "{{.Name}}", "--", name], capture_output=True, text=True, env=ENV, timeout=20)
+    if r.returncode != 0 or r.stdout.strip().lstrip("/") != name:
+        print("ERROR unknown container")
+        return 2
+    print(f"Restarting {name}", flush=True)
+    r = subprocess.run([docker, "restart", "--time", "10", "--", name], capture_output=True, text=True, env=ENV, timeout=100)
+    if r.returncode != 0:
+        print(f"ERROR {(r.stderr or r.stdout).strip()[:300]}")
+        return r.returncode
+    print("Done", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

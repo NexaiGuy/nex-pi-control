@@ -6,9 +6,9 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient, type UseQueryO
 import { cacheGet, cacheSet } from './cache';
 import { ApiError, api } from './client';
 import type {
-  ActionResult, AuditEntry, Backup, Command, CommandResult, ContainersResponse, DeviceInfo, Disks,
-  GpioState, Info, LogLine, MetricMeta, Overview, Ports, Process, RangeKey, Series, SensorsResponse, Service, ShellState,
-  Site, WolDevice,
+  ActionResult, AgentUpdateState, AuditEntry, Backup, Command, CommandResult, ContainerRestartResult, ContainersResponse, DeviceInfo, Disks,
+  EventsResponse, GpioState, Info, LogLine, MetricMeta, Overview, Ports, Process, RangeKey, Series, SensorsResponse, Service, ShellState,
+  Site, UpdatesState, WolDevice,
 } from './types';
 import { createStore } from '@/state/store';
 
@@ -86,6 +86,9 @@ export const qk = {
   wol: ['wol'] as const,
   audit: ['audit'] as const,
   shell: ['shell'] as const,
+  events: ['events'] as const,
+  updates: ['updates'] as const,
+  agentUpdate: ['agent-update'] as const,
 };
 
 export const useInfo = () => useCached<Info>(qk.info, () => api.get('/v1/info'), 60000);
@@ -123,6 +126,16 @@ export const useSensors = () => useCached<SensorsResponse>(qk.sensors, () => api
 export const useCommands = () => useCached<Command[]>(qk.commands, () => api.get('/v1/commands'), false);
 export const useWol = () => useCached<WolDevice[]>(qk.wol, () => api.get('/v1/wol'), false);
 export const useAudit = () => useCached<AuditEntry[]>(qk.audit, () => api.get('/v1/audit', { limit: 200 }), 15000);
+export const useEvents = (enabled = true) => useCached<EventsResponse>(qk.events, () => api.get('/v1/events', { limit: 100 }), 30000, { enabled });
+/** Polt snel zolang er een update loopt, anders traag. */
+export const useUpdates = (fast: boolean, enabled = true) => useCached<UpdatesState>(qk.updates, () => api.get('/v1/updates'), fast ? 2000 : 30000, { enabled });
+export const useAgentUpdate = (fast: boolean, enabled = true) =>
+  useCached<AgentUpdateState>(qk.agentUpdate, () => api.get('/v1/agent/update'), fast ? 2000 : 60000, {
+    enabled,
+    // Tijdens een agent-update valt de verbinding even weg: blijf rustig opnieuw proberen.
+    retry: (count) => count < (fast ? 20 : 2),
+    retryDelay: 2000,
+  });
 export const useShellState = (interval: number | false = 5000) => useCached<ShellState>(qk.shell, () => api.get('/v1/shell'), interval);
 
 // Acties --------------------------------------------------------------------------
@@ -150,3 +163,15 @@ export const useGpioAction = () =>
 export const useShellStart = () => useAction(() => api.post<ActionResult>('/v1/shell/start'), [qk.shell]);
 export const useShellStop = () => useAction(() => api.post<ActionResult>('/v1/shell/stop'), [qk.shell]);
 export const useAckCrc = () => useAction(() => api.post<ActionResult>('/v1/disks/acknowledge-crc'), [qk.disks, qk.overview]);
+export const useRestartContainer = () =>
+  useAction((ref: string) => api.post<ContainerRestartResult>(`/v1/containers/${encodeURIComponent(ref)}/restart`, {}, { timeoutMs: 130000 }), [qk.containers, qk.overview, qk.events]);
+export const useCheckUpdates = () => useAction(() => api.post<ActionResult>('/v1/updates/check'), [qk.updates]);
+export const useInstallUpdates = () => useAction(() => api.post<ActionResult>('/v1/updates/install'), [qk.updates]);
+export const useStartAgentUpdate = () => useAction(() => api.post<ActionResult>('/v1/agent/update'), [qk.agentUpdate]);
+export const useCheckAgentUpdate = () => {
+  const qc = useQueryClient();
+  return useMutation<AgentUpdateState, ApiError, void>({
+    mutationFn: () => track(api.get<AgentUpdateState>('/v1/agent/update', { refresh: true })),
+    onSuccess: (d) => qc.setQueryData(qk.agentUpdate, d),
+  });
+};

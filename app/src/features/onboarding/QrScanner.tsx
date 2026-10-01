@@ -5,7 +5,7 @@ import { StyleSheet, View } from 'react-native';
 import { Button, T } from '@/components/primitives';
 import { t } from '@/i18n';
 import { parseQr, type Connection } from '@/state/settings';
-import { colors, radius, space } from '@/theme/tokens';
+import { colors, radius, space, themed } from '@/theme/tokens';
 
 export function QrScanner({ onResult, onInvalid }: { onResult: (c: Connection) => void; onInvalid: () => void }) {
   const [perm, request] = useCameraPermissions();
@@ -43,7 +43,7 @@ export function QrScanner({ onResult, onInvalid }: { onResult: (c: Connection) =
   );
 }
 
-const q = StyleSheet.create({
+const q = themed(() => StyleSheet.create({
   wrap: { height: 320, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' },
   frame: { width: 220, height: 220, borderRadius: radius.lg, borderWidth: 3, borderColor: colors.mint },
-});
+}));

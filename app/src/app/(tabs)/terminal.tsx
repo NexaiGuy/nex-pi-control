@@ -18,7 +18,7 @@ import { mmss } from '@/lib/format';
 import { useKeyboardVisible } from '@/lib/useKeyboard';
 import { connectionStore, prefsStore, savePrefs } from '@/state/settings';
 import { useStore } from '@/state/store';
-import { colors, fonts, radius, space } from '@/theme/tokens';
+import { colors, fonts, radius, space, themed } from '@/theme/tokens';
 
 interface Tab {
   id: number;
@@ -280,7 +280,7 @@ export default function TerminalScreen() {
   );
 }
 
-const st = StyleSheet.create({
+const st = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   lockIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.purpleSoft, alignItems: 'center', justifyContent: 'center' },
   top: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md, paddingVertical: space.sm, borderBottomWidth: 1, borderBottomColor: colors.line },
@@ -299,4 +299,4 @@ const st = StyleSheet.create({
   reconnect: { position: 'absolute', left: space.lg, right: space.lg, bottom: space.lg },
   snip: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.surface2, borderRadius: radius.md, padding: space.md, minHeight: 48 },
   snipText: { color: colors.text, fontFamily: fonts.mono, fontSize: 13, flex: 1 },
-});
+}));

@@ -53,6 +53,45 @@ async def start_unit(unit: str) -> tuple[bool, str]:
     return r.code == 0, (r.stderr or "").strip()[:300]
 
 
+async def start_unit_nowait(unit: str) -> tuple[bool, str]:
+    """Start een lange oneshot-unit zonder te wachten (updates). De app volgt de voortgang via unit_run_info."""
+    r = await run(["systemctl", "start", "--no-block", "--no-ask-password", "--", unit], timeout=30)
+    return r.code == 0, (r.stderr or "").strip()[:300]
+
+
+def _unix(v: str | None) -> int | None:
+    v = (v or "").strip()
+    if v.startswith("@"):
+        try:
+            return int(float(v[1:]))
+        except ValueError:
+            return None
+    return None
+
+
+async def unit_run_info(unit: str, max_lines: int = 300) -> dict:
+    """Toestand en uitvoer van de laatste run van een oneshot-unit."""
+    r = await run(["systemctl", "show", "--no-pager", "--timestamp=unix",
+                   "--property=ActiveState,Result,ExecMainStatus,InvocationID,ExecMainStartTimestamp,ExecMainExitTimestamp", "--", unit], timeout=10)
+    props = dict(line.split("=", 1) for line in r.stdout.splitlines() if "=" in line)
+    inv = props.get("InvocationID", "").strip()
+    lines: list[str] = []
+    if inv and all(c in "0123456789abcdef" for c in inv):
+        logs = await run(["journalctl", "--no-pager", f"_SYSTEMD_INVOCATION_ID={inv}", "-o", "cat", "-n", str(max_lines)], timeout=15)
+        lines = [ln for ln in logs.stdout.splitlines() if ln.strip()][-max_lines:]
+    state = props.get("ActiveState", "unknown")
+    started = _unix(props.get("ExecMainStartTimestamp"))
+    return {
+        "running": state in ("activating", "active", "reloading"),
+        "state": state,
+        "result": (props.get("Result") or None) if started else None,
+        "exit_status": int(props["ExecMainStatus"]) if (props.get("ExecMainStatus") or "").isdigit() and started else None,
+        "started_at": started,
+        "finished_at": _unix(props.get("ExecMainExitTimestamp")),
+        "log": lines,
+    }
+
+
 async def stop_unit(unit: str) -> tuple[bool, str]:
     r = await run(["systemctl", "stop", "--no-ask-password", "--", unit], timeout=30)
     return r.code == 0, (r.stderr or "").strip()[:300]

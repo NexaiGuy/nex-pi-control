@@ -9,7 +9,7 @@ import { ConfirmSheet, ErrorState, Sheet, Skeleton, toast, type ConfirmSpec } fr
 import { Button, Card, Chip, KeyValue, Row, SectionTitle, StatusPill, T } from '@/components/primitives';
 import { t } from '@/i18n';
 import { KIND_COLOR, PinHeader } from '@/components/PinHeader';
-import { space } from '@/theme/tokens';
+import { space, themed } from '@/theme/tokens';
 
 export default function GpioScreen() {
   const q = useGpio();
@@ -98,6 +98,6 @@ export default function GpioScreen() {
   );
 }
 
-const g = StyleSheet.create({
+const g = themed(() => StyleSheet.create({
   legend: { width: 10, height: 10, borderRadius: 5 },
-});
+}));

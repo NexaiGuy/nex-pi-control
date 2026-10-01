@@ -1,0 +1,58 @@
+#!/opt/hal-agent/venv/bin/python
+"""Draait als root via hal-apt-check.service (timer: elke 6 uur). Ververst de pakketlijsten en schrijft welke
+updates klaarstaan naar /var/lib/hal-agent/apt/status.json. Installeert zelf niets."""
+
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+OUT_DIR = "/var/lib/hal-agent/apt"
+OUT = os.path.join(OUT_DIR, "status.json")
+ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C", "LC_ALL": "C", "DEBIAN_FRONTEND": "noninteractive"}
+LINE_RE = re.compile(r"^(?P<name>[^/\s]+)/(?P<suite>\S+)\s+(?P<to>\S+)\s+\S+\s+\[upgradable from: (?P<from>[^\]]+)\]")
+
+
+def parse(text: str) -> list[dict]:
+    pkgs = []
+    for line in text.splitlines():
+        m = LINE_RE.match(line.strip())
+        if m:
+            pkgs.append({"name": m["name"], "from": m["from"], "to": m["to"], "security": "security" in m["suite"]})
+    pkgs.sort(key=lambda p: (not p["security"], p["name"]))
+    return pkgs
+
+
+def write(data: dict) -> None:
+    os.makedirs(OUT_DIR, exist_ok=True)
+    tmp = OUT + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+    os.chmod(tmp, 0o640)
+    try:
+        import grp
+
+        os.chown(tmp, 0, grp.getgrnam("halagent").gr_gid)
+    except (KeyError, OSError):
+        pass
+    os.replace(tmp, OUT)
+
+
+def main() -> int:
+    error = None
+    u = subprocess.run(["apt-get", "update", "-q"], capture_output=True, text=True, env=ENV, timeout=600)
+    if u.returncode != 0:
+        error = (u.stderr or u.stdout).strip().splitlines()[-1:] or ["apt-get update failed"]
+        error = error[0][:300]
+        print(f"WARNING {error}")
+    r = subprocess.run(["apt", "list", "--upgradable"], capture_output=True, text=True, env=ENV, timeout=120)
+    pkgs = parse(r.stdout)
+    write({"checked_at": int(time.time()), "packages": pkgs, "reboot_required": os.path.exists("/var/run/reboot-required"), "error": error})
+    print(f"{len(pkgs)} update(s) available, {sum(1 for p in pkgs if p['security'])} security")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

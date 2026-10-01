@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { GpioPin } from '@/api/types';
-import { colors, fonts, radius } from '@/theme/tokens';
+import { colors, fonts, radius, themed } from '@/theme/tokens';
 import { t } from '@/i18n';
 
 export const KIND_COLOR: Record<GpioPin['kind'], string> = {
@@ -56,7 +56,7 @@ export function PinHeader({ pins, onPress, selected }: { pins: GpioPin[]; onPres
 }
 
 
-const g = StyleSheet.create({
+const g = themed(() => StyleSheet.create({
   header: { gap: 2 },
   row: { flexDirection: 'row', gap: 2 },
   cell: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, paddingHorizontal: 6, borderRadius: radius.sm, minHeight: 48 },
@@ -65,4 +65,4 @@ const g = StyleSheet.create({
   name: { fontFamily: fonts.monoMedium, fontSize: 12 },
   sub: { fontFamily: fonts.mono, fontSize: 10, color: colors.textMuted },
   legend: { width: 10, height: 10, borderRadius: 5 },
-});
+}));

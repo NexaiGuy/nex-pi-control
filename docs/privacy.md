@@ -34,7 +34,7 @@ The built-in demo uses sample data inside the app and makes no network connectio
 
 ## Your server
 
-The agent you install on your Raspberry Pi stores statistics and an audit log on that Pi only. It does not send anything to Nex AI. Its source code is public at [github.com/NexaiGuy/nex-pi-control](https://github.com/NexaiGuy/nex-pi-control).
+The agent you install on your Raspberry Pi stores statistics and an audit log on that Pi only. It does not send anything to Nex AI. When you open the Updates screen, the agent asks GitHub for the newest release of its source code (no personal data, at most once every 6 hours; you can turn this off with `HAL_UPDATE_CHECK=0`). The home screen widget shows status data of your Pi on your own phone only. Its source code is public at [github.com/NexaiGuy/nex-pi-control](https://github.com/NexaiGuy/nex-pi-control).
 
 ## Children
 

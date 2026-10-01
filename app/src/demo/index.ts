@@ -126,6 +126,62 @@ function action(message: string, extra: Json = {}) {
 /** Beheermodus in de demo: enkel in het geheugen, zodat de terminal ook zonder server te proberen is. */
 let shellSince: number | null = null;
 
+/** Onderhoud in de demo: herstarte containers, geïnstalleerde updates en een gesimuleerde agent-update. */
+const fixedContainers = new Set<string>();
+let aptDoneAt: number | null = null;
+let aptStartedAt: number | null = null;
+let agentStartedAt: number | null = null;
+const RUN_SECONDS = 5;
+
+function demoRun(startedAt: number | null, logStart: string[], logEnd: string[]) {
+  if (startedAt === null) return { running: false, state: 'inactive', result: null, exit_status: null, started_at: null, finished_at: null, log: [] };
+  const done = now() - startedAt >= RUN_SECONDS;
+  return {
+    running: !done,
+    state: done ? 'inactive' : 'activating',
+    result: done ? 'success' : null,
+    exit_status: done ? 0 : null,
+    started_at: startedAt,
+    finished_at: done ? startedAt + RUN_SECONDS : null,
+    log: done ? [...logStart, ...logEnd] : logStart,
+  };
+}
+
+function demoContainers() {
+  const data = FX['/v1/containers'] as { containers: (Json & { name: string; state: string })[] };
+  return {
+    ...data,
+    containers: data.containers.map((c) =>
+      fixedContainers.has(c.name) ? { ...c, state: 'running', status: 'Up 1 minute', health: 'healthy', exit_code: 0 } : c,
+    ),
+  };
+}
+
+function demoUpdates() {
+  const base = FX['/v1/updates'] as Json & { packages: { name: string; to: string }[] };
+  const finished = aptStartedAt !== null && now() - aptStartedAt >= RUN_SECONDS;
+  if (finished) aptDoneAt = aptDoneAt ?? now();
+  const pkgs = aptDoneAt ? [] : base.packages;
+  return {
+    ...base,
+    checked_at: now() - (aptDoneAt ? 0 : 7200),
+    count: pkgs.length,
+    security_count: aptDoneAt ? 0 : (base.security_count as number),
+    packages: pkgs,
+    // De demo heeft een "falende schijf" in beeld; in de demo laten we de knop toch werken.
+    blocked_reason: null,
+    upgrade: demoRun(aptStartedAt, ['Reading package lists...', `${base.packages.length} upgraded, 0 newly installed, 0 to remove`],
+      [...base.packages.map((p) => `Setting up ${p.name} (${p.to}) ...`), 'Done']),
+  };
+}
+
+function demoAgentUpdate() {
+  const base = FX['/v1/agent/update'] as Json & { latest: string; current: string };
+  const run = demoRun(agentStartedAt, [`Downloading v${base.latest}`], ['hal-agent restarted and healthy', `Updated to ${base.latest}`]);
+  const done = run.result === 'success';
+  return { ...base, current: done ? base.latest : base.current, update_available: !done, run };
+}
+
 /** Antwoord van de demo op een API-pad, of undefined als het pad onbekend is. */
 export async function demoRequest(target: 'api' | 'shell', path: string, method: string, query: Record<string, unknown> = {}, body?: unknown): Promise<unknown> {
   const offset = now() - BASE_TS;
@@ -170,6 +226,25 @@ export async function demoRequest(target: 'api' | 'shell', path: string, method:
     return action(nlang ? 'Beheermodus gestopt (demo)' : 'Admin mode stopped (demo)');
   }
   if (path === '/v1/disks/acknowledge-crc') return action('Demo');
+  if (path === '/v1/containers' && method === 'GET') return shift(demoContainers(), offset);
+  if (/^\/v1\/containers\/[^/]+\/restart$/.test(path)) {
+    const ref = decodeURIComponent(path.split('/')[3] ?? '');
+    const c = demoContainers().containers.find((x) => x.name === ref || x.id === ref);
+    if (!c) return undefined;
+    fixedContainers.add(c.name);
+    return action(nlang ? `${c.name} herstart (demo)` : `${c.name} restarted (demo)`, { name: c.name, output: [c.name] });
+  }
+  if (path === '/v1/updates') return demoUpdates();
+  if (path === '/v1/updates/check') return action(nlang ? 'Controle gestart (demo)' : 'Check started (demo)');
+  if (path === '/v1/updates/install') {
+    aptStartedAt = aptStartedAt ?? now();
+    return action(nlang ? 'Updates worden geïnstalleerd (demo)' : 'Installing updates (demo)');
+  }
+  if (path === '/v1/agent/update' && method === 'GET') return demoAgentUpdate();
+  if (path === '/v1/agent/update') {
+    agentStartedAt = agentStartedAt ?? now();
+    return action(nlang ? 'Update gestart (demo)' : 'Update started (demo)');
+  }
   const hit = FX[path];
   return hit === undefined ? undefined : shift(hit, offset);
 }

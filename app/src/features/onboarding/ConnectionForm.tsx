@@ -6,7 +6,7 @@ import type { Info } from '@/api/types';
 import { Button, Icon, T } from '@/components/primitives';
 import { t } from '@/i18n';
 import { isLanHttp, normalizeBase, validateUrl, type Connection } from '@/state/settings';
-import { colors, fonts, radius, space, touch } from '@/theme/tokens';
+import { colors, fonts, radius, space, themed, touch } from '@/theme/tokens';
 
 function Field({ label, value, onChange, secret, placeholder }: { label: string; value: string; onChange: (v: string) => void; secret?: boolean; placeholder?: string }) {
   const [show, setShow] = useState(false);
@@ -100,7 +100,7 @@ export function ConnectionForm({ value, onChange }: { value: Connection; onChang
   );
 }
 
-const f = StyleSheet.create({
+const f = themed(() => StyleSheet.create({
   inputWrap: {
     flexDirection: 'row', alignItems: 'center', minHeight: touch, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line,
     backgroundColor: colors.surface2, paddingHorizontal: space.md,
@@ -108,4 +108,4 @@ const f = StyleSheet.create({
   input: { flex: 1, color: colors.text, fontFamily: fonts.mono, fontSize: 13, paddingVertical: 10 },
   warn: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-start' },
   result: { flexDirection: 'row', gap: space.sm, alignItems: 'center', borderWidth: 1, borderRadius: radius.md, padding: space.md },
-});
+}));

@@ -51,6 +51,9 @@ Connection guides: [Tailscale](../docs/connect-tailscale.md), [home network](../
 | QR code for the app | `sudo /opt/hal-agent/bin/hal-qr --api <url> [--shell <url>]` |
 | Rotate tokens | `sudo /opt/hal-agent/bin/hal-rotate-tokens` |
 | After editing allowed-actions.yml or commands.yml | `sudo /opt/hal-agent/bin/hal-apply-config` |
+| Check for system updates now | `sudo systemctl start hal-apt-check` |
+| Last system update run | `journalctl -u hal-apt-upgrade -n 100 --no-pager` |
+| Last agent update run | `journalctl -u hal-agent-update -n 100 --no-pager` |
 
 ## Configuration in /etc/hal-agent
 
@@ -58,7 +61,7 @@ Connection guides: [Tailscale](../docs/connect-tailscale.md), [home network](../
 |---|---|
 | `agent.env` | agent token, optional Cloudflare Access team domain and AUD, `HAL_ALLOW_LAN` |
 | `shell.env` | shell token, optional AUD for the shell, idle timeout |
-| `allowed-actions.yml` | which services may be restarted, reboot and power off on or off |
+| `allowed-actions.yml` | which services may be restarted, reboot and power off, container restarts (`containers`, `container_deny`), system updates (`updates`) and agent updates (`agent_update`). All on by default |
 | `commands.yml` | your own commands (the app only ever sends the id) |
 | `gpio.yml` | switchable pins and their names |
 | `sensors.yml` | DS18B20, DHT (kernel driver), BMP280 |
@@ -76,6 +79,10 @@ The agent reloads `sensors.yml`, `sites.yml`, `gpio.yml` and `wol.yml` automatic
 - **Loopback by default.** The agent only listens on `127.0.0.1`. `--lan` sets `HAL_ALLOW_LAN=1`, which binds to the LAN address and accepts private addresses only.
 - **No sudo.** Restarts, your commands, reboot and power off go through polkit. `/etc/polkit-1/rules.d/50-hal-agent.rules` allows exactly the units from your allowlist for `halagent` and explicitly denies everything else.
 - **SMART** runs as root in a separate read-only timer. The agent only reads the JSON it writes.
+- **Containers** are restarted by a fixed root unit, `hal-container@<name>.service`, which only runs `docker restart` on one existing container. Never stop or remove. The Docker proxy itself stays GET only.
+- **System updates:** `hal-apt-check.timer` (every 6 hours) only lists what is available. Installing runs `hal-apt-upgrade.service`: `apt-get upgrade` that keeps your config files and never removes packages. Refused while a disk shows signs of failure.
+- **Agent updates:** `hal-agent-update.service` downloads the newest tagged release of this repository from GitHub, installs it with `deploy.sh` (backup first) and checks that the agent comes back healthy with the new version. If not, it rolls back automatically. The agent only asks GitHub when you open the Updates screen (cached for 6 hours). Set `HAL_UPDATE_CHECK=0` in `agent.env` to turn this off, or `HAL_UPDATE_REPO=owner/repo` to use your own fork.
+- **Alerts:** every 30 seconds the agent compares the state with the previous one and keeps a log of new and resolved problems (disk, services, containers, sites, security updates) for 30 days. The app fetches it, there is no push server.
 - **Docker** is reached through `docker-socket-proxy`, which only allows GET. The agent filters with an allowlist, so `Env`, mounts and labels with secrets never leave the Pi.
 - **Processes:** passwords and tokens in command lines are masked.
 - **Terminal:** every typed line goes to the audit log (journald, identifier `hal-shell-audit`). Password prompts are logged as `[hidden input]`. Sudo in the terminal asks for your own password.
@@ -85,7 +92,7 @@ Found a security issue? See [SECURITY.md](../SECURITY.md).
 
 ## Update
 
-Run the install line again, or from a clone:
+From the app: More, Updates, Update to x.y.z (agent 1.2.0 and newer). Or run the install line again, or from a clone:
 
 ```bash
 git pull && sudo bash agent/deploy.sh
@@ -126,6 +133,8 @@ Scenarios: `ok`, `demo`, `disk` (failing /dev/sda) and `busy` (hot CPU, throttli
 | `/etc/hal-agent` | root, files 0640 | configuration and tokens |
 | `/var/lib/hal-agent` | halagent, 0750 | statistics (SQLite), audit log |
 | `/var/lib/hal-agent/smart` | root:halagent, 0750 | SMART JSON from the timer |
+| `/var/lib/hal-agent/apt` | root:halagent, 0750 | available system updates from the timer |
+| `/var/cache/hal-agent-update` | root, 0700 | download of an agent update (removed after success) |
 | `/etc/systemd/system/hal-*` | root | units, plus drop-in `hal-agent.service.d/10-hardware.conf` |
 | `/etc/polkit-1/rules.d/50-hal-agent.rules` | root | allowed actions |
 | docker `hal-docker-socket-proxy` | root | 127.0.0.1:2375, GET only |

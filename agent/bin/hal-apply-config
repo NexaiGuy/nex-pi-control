@@ -31,6 +31,9 @@ polkit.addRule(function(action, subject) {
         if (verb === "start" && startUnits.indexOf(unit) >= 0) {
             return polkit.Result.YES;
         }
+        if (verb === "start" && %(containers)s && /^hal-container@[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\.service$/.test(unit)) {
+            return polkit.Result.YES;
+        }
         if (verb === "stop" && unit === "hal-shell.service") {
             return polkit.Result.YES;
         }
@@ -67,14 +70,24 @@ def main():
     for c in commands.get("commands") or []:
         if isinstance(c, dict) and ID_RE.match(str(c.get("id", ""))):
             start.append(f"hal-cmd@{c['id']}.service")
-    power = "true" if actions.get("power", True) else "false"
-    content = TEMPLATE % {"restart": json.dumps(sorted(set(restart))), "start": json.dumps(sorted(set(start))), "power": power}
+    def on(key):
+        v = actions.get(key, True)
+        return v is True or (isinstance(v, str) and v.strip().lower() in ("true", "yes", "on", "1"))
+
+    if on("updates"):
+        start += ["hal-apt-check.service", "hal-apt-upgrade.service"]
+    if on("agent_update"):
+        start.append("hal-agent-update.service")
+    power = "true" if on("power") else "false"
+    containers = "true" if on("containers") else "false"
+    content = TEMPLATE % {"restart": json.dumps(sorted(set(restart))), "start": json.dumps(sorted(set(start))), "power": power,
+                          "containers": containers}
     tmp = RULES + ".tmp"
     with open(tmp, "w") as f:
         f.write(content)
     os.chmod(tmp, 0o644)
     os.replace(tmp, RULES)
-    print(f"polkit rule updated: {len(restart)} restartable services, {len(start)} startable units, power={power}")
+    print(f"polkit rule updated: {len(restart)} restartable services, {len(start)} startable units, power={power}, container restarts={containers}")
     return 0
 
 

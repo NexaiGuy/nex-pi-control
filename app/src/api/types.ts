@@ -97,6 +97,8 @@ export interface Info {
   shell_url: string | null;
   access_configured: boolean;
   scenario?: string;
+  /** Sinds agent 1.2.0: welke nieuwere functies deze agent kent. */
+  features?: string[];
 }
 
 export interface DeviceInfo {
@@ -175,6 +177,8 @@ export interface Container {
   cpu_percent?: number;
   memory_bytes?: number;
   memory_limit?: number | null;
+  /** Sinds agent 1.2.0. */
+  restart_allowed?: boolean;
 }
 
 export interface ContainersResponse {
@@ -365,4 +369,74 @@ export interface FileContent {
   size: number;
   modified: number;
   writable?: boolean;
+}
+
+// --- Agent 1.2.0: gebeurtenissen, updates, containers herstarten ------------------------------------
+
+export type EventLevel = 'ok' | 'info' | 'warning' | 'critical';
+
+export interface AgentEvent {
+  id: number;
+  ts: number;
+  level: EventLevel;
+  kind: 'disk' | 'service' | 'container' | 'site' | 'updates' | string;
+  key: string;
+  resolved: boolean;
+  title: string;
+  body: string;
+}
+
+export interface EventsResponse {
+  last_id: number;
+  open: number;
+  events: AgentEvent[];
+}
+
+export interface UnitRun {
+  running: boolean;
+  state: string;
+  result: string | null;
+  exit_status: number | null;
+  started_at: number | null;
+  finished_at: number | null;
+  log: string[];
+}
+
+export interface AptPackage {
+  name: string;
+  from: string;
+  to: string;
+  security: boolean;
+}
+
+export interface UpdatesState {
+  checked_at: number | null;
+  count: number;
+  security_count: number;
+  packages: AptPackage[];
+  reboot_required: boolean;
+  error: string | null;
+  allowed: boolean;
+  checking: boolean;
+  upgrade: UnitRun;
+  blocked_reason: string | null;
+}
+
+export interface AgentUpdateState {
+  current: string;
+  latest: string | null;
+  tag: string | null;
+  url: string | null;
+  notes: string;
+  error: string | null;
+  update_available: boolean;
+  allowed: boolean;
+  run: UnitRun;
+}
+
+export interface ContainerRestartResult {
+  ok: boolean;
+  name: string;
+  output: string[];
+  message: string;
 }

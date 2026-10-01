@@ -1,0 +1,9 @@
+[Unit]
+Description=Nex Pi Control: update the agent from GitHub with automatic rollback
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/hal-agent/bin/hal-self-update
+TimeoutStartSec=900

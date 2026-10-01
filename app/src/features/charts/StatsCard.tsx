@@ -5,7 +5,7 @@ import type { Series } from '@/api/types';
 import { Card, Icon, Row, T } from '@/components/primitives';
 import { t } from '@/i18n';
 import { num, unitValue } from '@/lib/format';
-import { colors, series as palette, space } from '@/theme/tokens';
+import { colors, series as palette, space, themed } from '@/theme/tokens';
 
 import { LineChart } from './Charts';
 
@@ -78,8 +78,8 @@ export function shortLabel(l: string): string {
   return l.replace(/^(Schijfgebruik|Disk usage|Latency) /, '').replace(/^CPU (kern|core) /, (_m, w: string) => `${w[0]!.toUpperCase()}${w.slice(1)} `);
 }
 
-const cs = StyleSheet.create({
+const cs = themed(() => StyleSheet.create({
   summary: { flexDirection: 'row', gap: space.sm },
   legend: { flexDirection: 'row', flexWrap: 'wrap', columnGap: space.lg, rowGap: 6 },
   sw: { width: 10, height: 10, borderRadius: 3 },
-});
+}));

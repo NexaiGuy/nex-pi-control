@@ -11,7 +11,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { ApiError } from '@/api/client';
 import { locale, t } from '@/i18n';
 import { createStore, useStore } from '@/state/store';
-import { colors, fonts, radius, space, touch } from '@/theme/tokens';
+import { colors, fonts, radius, space, themed, touch } from '@/theme/tokens';
 
 import { Button, Icon, T, type IconName } from './primitives';
 
@@ -361,9 +361,9 @@ export function SearchField({ value, onChange, placeholder = t.common.search }: 
   );
 }
 
-const LEVEL_COLORS: Record<string, string> = {
+const LEVEL_COLORS: Record<string, string> = themed(() => ({
   emerg: colors.red, alert: colors.red, crit: colors.red, err: colors.red, warning: colors.amber, notice: colors.blue, info: colors.textMuted, debug: colors.textFaint,
-};
+}));
 
 export function LogView({ lines }: { lines: { ts?: number; level?: string; message: string }[] }) {
   return (
@@ -379,7 +379,7 @@ export function LogView({ lines }: { lines: { ts?: number; level?: string; messa
   );
 }
 
-const ov = StyleSheet.create({
+const ov = themed(() => StyleSheet.create({
   sheet: {
     position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.surface, borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl, borderWidth: 1, borderColor: colors.line,
@@ -410,6 +410,6 @@ const ov = StyleSheet.create({
     borderWidth: 1, borderColor: colors.line, paddingHorizontal: space.md,
   },
   searchInput: { flex: 1, color: colors.text, fontFamily: fonts.body, fontSize: 15, paddingVertical: 0 },
-  log: { backgroundColor: '#07070C', borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, padding: space.md, gap: 2 },
+  log: { backgroundColor: colors.codeBg, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, padding: space.md, gap: 2 },
   logLine: { fontFamily: fonts.mono, fontSize: 11, lineHeight: 16 },
-});
+}));

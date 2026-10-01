@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Sparkline } from '@/features/charts/Charts';
-import { colors, levelColor, radius, space, type Level } from '@/theme/tokens';
+import { colors, type Level, levelColor, radius, space, themed } from '@/theme/tokens';
 
 import { Card, Icon, T, type IconName } from './primitives';
 
@@ -40,9 +40,9 @@ export function Tile({
   );
 }
 
-const tl = StyleSheet.create({
+const tl = themed(() => StyleSheet.create({
   tile: { flex: 1, minHeight: 148, padding: space.md, gap: 4, borderRadius: radius.lg, overflow: 'hidden' },
   top: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: 4 },
   icon: { width: 24, height: 24, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   spark: { marginTop: 'auto', marginHorizontal: -space.md, marginBottom: -space.md, opacity: 0.95 },
-});
+}));

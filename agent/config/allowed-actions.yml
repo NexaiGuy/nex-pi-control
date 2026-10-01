@@ -11,3 +11,15 @@ restart:
 
 # Reboot and power off from the app (always hold 2 s and confirm with the server name)
 power: true
+
+# Restart Docker containers from the app (only `docker restart`, never stop or remove)
+containers: true
+# Containers that may never be restarted from the app
+container_deny: []
+  # - docker-socket-proxy
+
+# Check and install system updates (apt-get upgrade, keeps your config files, never removes packages)
+updates: true
+
+# Update this agent from the app to the newest GitHub release, with automatic rollback
+agent_update: true

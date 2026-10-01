@@ -5,10 +5,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { checkNow } from '@/background/alerts';
 import { useOverview } from '@/api/hooks';
-import { Icon, type IconName } from '@/components/primitives';
+import { Icon, NeonLine, type IconName } from '@/components/primitives';
 import { t } from '@/i18n';
 import { useKeyboardVisible } from '@/lib/useKeyboard';
-import { colors, fonts, space } from '@/theme/tokens';
+import { refreshWidget } from '@/widget/refresh';
+import { colors, fonts, space, themed } from '@/theme/tokens';
 
 const ICONS: Record<string, IconName> = {
   index: 'activity',
@@ -40,6 +41,7 @@ function TabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
         const color = focused ? colors.text : colors.textFaint;
         return (
           <Pressable key={route.key} onPress={onPress} style={tb.item} accessibilityRole="tab" accessibilityState={{ selected: focused }} accessibilityLabel={label}>
+            {focused ? <NeonLine height={3} style={tb.neon} /> : null}
             <View style={[tb.iconWrap, focused && tb.iconActive]}>
               <Icon name={ICONS[route.name] ?? 'circle'} size={20} color={focused ? colors.purple : color} />
               {route.name === 'index' && (alarm || warn) ? (
@@ -59,7 +61,10 @@ function TabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
 export default function TabsLayout() {
   const { data } = useOverview();
   useEffect(() => {
-    if (data) void checkNow(data).catch(() => undefined);
+    if (data) {
+      void checkNow(data).catch(() => undefined);
+      refreshWidget(data);
+    }
   }, [data?.ts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
@@ -73,14 +78,15 @@ export default function TabsLayout() {
   );
 }
 
-const tb = StyleSheet.create({
+const tb = themed(() => StyleSheet.create({
   bar: {
-    flexDirection: 'row', backgroundColor: '#0E0E16', borderTopWidth: 1, borderTopColor: colors.line, paddingTop: space.sm,
+    flexDirection: 'row', backgroundColor: colors.tabBar, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: space.sm,
     position: 'absolute', left: 0, right: 0, bottom: 0,
   },
   item: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 56, gap: 3 },
+  neon: { position: 'absolute', top: -space.sm - 1, left: '26%', right: '26%', alignSelf: 'auto' },
   iconWrap: { width: 52, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   iconActive: { backgroundColor: colors.purpleSoft },
   label: { fontFamily: fonts.bodyMedium, fontSize: 11 },
   badge: { position: 'absolute', top: 2, right: 12, width: 9, height: 9, borderRadius: 5, borderWidth: 2, borderColor: colors.bg },
-});
+}));

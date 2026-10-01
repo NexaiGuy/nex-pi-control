@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Draait als root via hal-agent-update.service, enkel na bevestiging in de app.
+# Haalt de nieuwste release van GitHub, installeert ze met deploy.sh (die eerst een backup maakt)
+# en controleert of de agent gezond terugkomt met de nieuwe versie. Zo niet: automatische rollback.
+set -uo pipefail
+export LANG=C LC_ALL=C PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+APP=/opt/hal-agent
+ENVF=/etc/hal-agent/agent.env
+WORK=/var/cache/hal-agent-update
+PY="$APP/venv/bin/python"
+
+REPO="$(grep -E '^HAL_UPDATE_REPO=' "$ENVF" 2>/dev/null | tail -n1 | cut -d= -f2- | tr -d '"'"'"' ')"
+REPO="${REPO:-NexaiGuy/nex-pi-control}"
+[[ "$REPO" =~ ^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$ ]] || { echo "ERROR invalid HAL_UPDATE_REPO"; exit 2; }
+HOST="$(grep -E '^HAL_AGENT_HOST=' "$ENVF" 2>/dev/null | tail -n1 | cut -d= -f2- | tr -d '"'"'"' ')"
+PORT="$(grep -E '^HAL_AGENT_PORT=' "$ENVF" 2>/dev/null | tail -n1 | cut -d= -f2- | tr -d '"'"'"' ')"
+HEALTH="http://${HOST:-127.0.0.1}:${PORT:-8120}/health"
+
+CUR="$(cd "$APP" && "$PY" -c 'from hal_common import VERSION; print(VERSION)')"
+echo "Installed: $CUR"
+JSON="$(curl -fsSL --max-time 20 -H 'Accept: application/vnd.github+json' -H 'User-Agent: nex-pi-control-agent' "https://api.github.com/repos/$REPO/releases/latest")" || { echo "ERROR could not reach GitHub"; exit 1; }
+TAG="$(printf '%s' "$JSON" | "$PY" -c 'import json,sys; print(json.load(sys.stdin).get("tag_name",""))')"
+[[ "$TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "ERROR no valid release tag found"; exit 1; }
+NEW="${TAG#v}"
+NEWER="$("$PY" -c 'import sys; a=tuple(map(int,sys.argv[1].split("."))); b=tuple(map(int,sys.argv[2].split("."))); print(1 if b>a else 0)' "$CUR" "$NEW")"
+if [[ "$NEWER" != 1 ]]; then echo "Already up to date ($CUR)"; exit 0; fi
+
+FREE_MB=$(df -Pm /opt | awk 'NR==2 {print $4}')
+[[ -z "$FREE_MB" || "$FREE_MB" -ge 200 ]] || { echo "ERROR less than 200 MB free, not starting"; exit 2; }
+
+install -d -m 0700 "$WORK"
+rm -rf "$WORK/src" "$WORK/release.tar.gz"
+mkdir -m 0700 "$WORK/src"
+echo "Downloading $TAG"
+curl -fsSL --max-time 180 -o "$WORK/release.tar.gz" "https://github.com/$REPO/archive/refs/tags/$TAG.tar.gz" || { echo "ERROR download failed"; exit 1; }
+tar -xzf "$WORK/release.tar.gz" -C "$WORK/src" --no-same-owner || { echo "ERROR archive is damaged"; exit 1; }
+SRC="$(find "$WORK/src" -mindepth 2 -maxdepth 2 -type d -name agent | head -n1)"
+[[ -n "$SRC" && -f "$SRC/deploy.sh" && -f "$SRC/hal_common/__init__.py" ]] || { echo "ERROR release does not contain an agent"; exit 1; }
+PKGV="$(cd "$SRC" && python3 -c 'import re; print(re.search(r"VERSION = \"([^\"]+)\"", open("hal_common/__init__.py").read()).group(1))')"
+[[ "$PKGV" == "$NEW" ]] || { echo "ERROR release $TAG contains version $PKGV"; exit 1; }
+
+echo "Installing $NEW"
+bash "$SRC/deploy.sh" 2>&1 | tee "$WORK/deploy.log"
+RC=${PIPESTATUS[0]}
+BACKUP="$(grep -m1 '^Backup: ' "$WORK/deploy.log" | cut -d' ' -f2-)"
+
+OK=0
+if [[ $RC -eq 0 ]]; then
+  for _ in $(seq 1 30); do
+    if curl -fsS --max-time 3 "$HEALTH" 2>/dev/null | grep -q "\"version\":\"$NEW\""; then OK=1; break; fi
+    sleep 1
+  done
+fi
+if [[ $OK -eq 1 ]]; then
+  echo "Updated to $NEW"
+  rm -rf "$WORK/src" "$WORK/release.tar.gz"
+  exit 0
+fi
+
+echo "ERROR the new version did not come up healthy, rolling back"
+if [[ -n "$BACKUP" && -d "$BACKUP" ]]; then
+  bash "$BACKUP/opt-hal-agent/rollback.sh" "$BACKUP" && echo "Rolled back to $CUR"
+else
+  echo "ERROR no backup found, check: journalctl -u hal-agent -n 50"
+fi
+exit 1

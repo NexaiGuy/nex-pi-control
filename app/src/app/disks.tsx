@@ -38,11 +38,11 @@ export default function DisksScreen() {
         <Card style={{ borderColor: colors.red, backgroundColor: colors.redBanner, gap: space.sm }}>
           <Row>
             <Icon name="alert-octagon" size={20} color={colors.red} />
-            <T v="h3" style={{ color: '#FFD9DB', flex: 1 }}>
+            <T v="h3" style={{ color: colors.bannerTitle, flex: 1 }}>
               {t.disk.safetyTitle}
             </T>
           </Row>
-          <T v="body" style={{ color: '#F4A6AA' }}>
+          <T v="body" style={{ color: colors.bannerText }}>
             {t.disk.safetyBody}
           </T>
         </Card>

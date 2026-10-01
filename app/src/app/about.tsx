@@ -8,7 +8,7 @@ import { ListGroup, ListRow } from '@/components/ListRow';
 import { Button, Card, Icon, IconButton, Row, SectionTitle, T, type IconName } from '@/components/primitives';
 import { t } from '@/i18n';
 import { LINKS, mailto } from '@/lib/links';
-import { colors, fonts, radius, space } from '@/theme/tokens';
+import { colors, fonts, radius, space, themed } from '@/theme/tokens';
 
 function open(url: string) {
   void Linking.openURL(url).catch(() => undefined);
@@ -96,7 +96,7 @@ export default function AboutScreen() {
   );
 }
 
-const a = StyleSheet.create({
+const a = themed(() => StyleSheet.create({
   root: { paddingHorizontal: space.lg, gap: space.lg },
   hero: { alignItems: 'center', gap: space.sm, marginVertical: space.lg },
   logo: {
@@ -104,4 +104,4 @@ const a = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', marginBottom: space.sm,
   },
   nex: { gap: space.md, borderColor: colors.purple, borderWidth: 1, borderRadius: radius.lg },
-});
+}));

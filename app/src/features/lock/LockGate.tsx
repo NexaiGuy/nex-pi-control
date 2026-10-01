@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HealthRing } from '@/features/charts/Charts';
 import { Button, Icon, T } from '@/components/primitives';
 import { t } from '@/i18n';
-import { colors, space } from '@/theme/tokens';
+import { colors, space, themed } from '@/theme/tokens';
 
 export async function authenticate(reason: string): Promise<boolean> {
   const hasHw = await LocalAuthentication.hasHardwareAsync();
@@ -84,8 +84,8 @@ export function LockGate({ enabled, autoLockMinutes, children }: { enabled: bool
   );
 }
 
-const l = StyleSheet.create({
+const l = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, justifyContent: 'space-between' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.xs },
   core: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.purpleSoft, alignItems: 'center', justifyContent: 'center' },
-});
+}));

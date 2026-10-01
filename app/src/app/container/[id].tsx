@@ -1,10 +1,13 @@
 import { useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 
-import { useContainerLogs, useContainers } from '@/api/hooks';
+import { errorMessage } from '@/api/client';
+import { useContainerLogs, useContainers, useInfo, useRestartContainer } from '@/api/hooks';
 import { DetailScreen } from '@/components/layout';
-import { ErrorState, LogView, SkeletonList } from '@/components/overlays';
-import { Card, KeyValue, Row, SectionTitle, StatusPill, T } from '@/components/primitives';
+import { ConfirmSheet, ErrorState, LogView, SkeletonList, toast, type ConfirmSpec } from '@/components/overlays';
+import { Button, Card, KeyValue, Row, SectionTitle, StatusPill, T } from '@/components/primitives';
 import { t } from '@/i18n';
+import { supports } from '@/lib/agent';
 import { bytes, pct } from '@/lib/format';
 import { containerLevel } from '@/lib/status';
 import { space } from '@/theme/tokens';
@@ -13,8 +16,13 @@ export default function ContainerDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const cid = String(id ?? '');
   const c = useContainers();
-  const logs = useContainerLogs(cid);
-  const x = c.data?.containers.find((k) => k.id === cid);
+  const info = useInfo();
+  const restart = useRestartContainer();
+  const [confirm, setConfirm] = useState<ConfirmSpec | null>(null);
+  // Werkt met id of naam (meldingen verwijzen naar de naam).
+  const x = c.data?.containers.find((k) => k.id === cid || k.name === cid);
+  const logs = useContainerLogs(x?.id ?? cid);
+  const canRestart = supports(info.data, 'container_restart');
   const st = x ? containerLevel(x) : null;
   return (
     <DetailScreen title={x?.name ?? cid} onRefresh={() => void Promise.all([c.refetch(), logs.refetch()])} refreshing={logs.isRefetching}>
@@ -42,9 +50,33 @@ export default function ContainerDetail() {
       {!logs.data && logs.isLoading ? <SkeletonList rows={4} /> : null}
       {!logs.data && logs.error ? <ErrorState error={logs.error} onRetry={() => void logs.refetch()} /> : null}
       {logs.data ? <LogView lines={logs.data.lines.map((l) => ({ message: l }))} /> : null}
+      {x && canRestart && x.restart_allowed !== false ? (
+        <Button
+          label={t.system.restartContainer}
+          icon="rotate-cw"
+          kind="secondary"
+          loading={restart.isPending}
+          style={{ marginTop: space.md }}
+          onPress={() =>
+            setConfirm({
+              title: t.system.restartContainer,
+              effect: t.system.restartContainerEffect(x.name),
+              confirmLabel: t.system.restartContainer,
+              dangerous: true,
+              icon: 'rotate-cw',
+              onConfirm: () =>
+                restart.mutate(x.name, {
+                  onSuccess: (r) => (r.ok ? toast.success(r.message) : toast.error(r.message)),
+                  onError: (e) => toast.error(errorMessage(e)),
+                }),
+            })
+          }
+        />
+      ) : null}
       <T v="caption" style={{ marginTop: space.md }}>
-        {t.system.readOnlyV1}
+        {!info.data ? '' : !canRestart ? t.system.restartNeedsAgent : x?.restart_allowed === false ? t.system.restartNotAllowed : ''}
       </T>
+      <ConfirmSheet spec={confirm} onClose={() => setConfirm(null)} />
     </DetailScreen>
   );
 }

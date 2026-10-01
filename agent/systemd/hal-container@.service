@@ -1,0 +1,11 @@
+[Unit]
+Description=Nex Pi Control: restart container %i
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/hal-agent/bin/hal-container-restart %i
+TimeoutStartSec=120
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes

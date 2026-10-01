@@ -58,3 +58,13 @@ jest.mock('react-native-worklets', () => require('react-native-worklets/src/mock
 jest.mock('react-native-reanimated', () => require('react-native-reanimated/mock'));
 // Taal van de gsm: standaard Nederlands in de tests; een testbestand kan dit overschrijven met jest.mock.
 jest.mock('expo-localization', () => ({ getLocales: () => [{ languageCode: 'nl', languageTag: 'nl-BE' }] }));
+jest.mock('react-native-android-widget', () => {
+  const React = require('react');
+  const el = (name) => (props) => React.createElement(name, props, props.children);
+  return {
+    FlexWidget: el('FlexWidget'),
+    TextWidget: el('TextWidget'),
+    requestWidgetUpdate: jest.fn(async () => {}),
+    registerWidgetTaskHandler: jest.fn(),
+  };
+});

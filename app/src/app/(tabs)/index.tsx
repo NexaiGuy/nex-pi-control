@@ -15,7 +15,7 @@ import { levelFromPercent } from '@/lib/alerts';
 import { bytes, duration, num, pct, rate } from '@/lib/format';
 import { connectionStore, serverName } from '@/state/settings';
 import { useStore } from '@/state/store';
-import { colors, levelColor, space, type Level } from '@/theme/tokens';
+import { colors, type Level, levelColor, space, themed } from '@/theme/tokens';
 
 const SPARK = ['cpu', 'ram', 'temp', 'fan', 'load1', 'net.rx', 'disk.write'];
 
@@ -260,7 +260,7 @@ function OverviewSkeleton() {
   );
 }
 
-const hs = StyleSheet.create({
+const hs = themed(() => StyleSheet.create({
   hero: { padding: space.lg, gap: space.md },
   reasons: { gap: space.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, paddingTop: space.md },
   countsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, marginTop: space.md, justifyContent: 'space-between' },
@@ -268,4 +268,4 @@ const hs = StyleSheet.create({
   grid: { gap: space.md },
   row: { flexDirection: 'row', gap: space.md },
   devIcon: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.purpleSoft, alignItems: 'center', justifyContent: 'center' },
-});
+}));

@@ -11,7 +11,7 @@ import { ConfirmSheet, EmptyState, ErrorState, HoldButton, SearchField, Sheet, S
 import { Button, Chip, Divider, Dot, KeyValue, Row, SectionTitle, Segmented, StatusPill, T } from '@/components/primitives';
 import { t } from '@/i18n';
 import { bytes, dateTime, duration, pct } from '@/lib/format';
-import { colors, space } from '@/theme/tokens';
+import { colors, space, themed } from '@/theme/tokens';
 import { containerLevel, serviceLevel, siteLevel } from '@/lib/status';
 
 type Seg = 'services' | 'containers' | 'sites' | 'processes';
@@ -281,10 +281,10 @@ function Processes() {
   );
 }
 
-const ps = StyleSheet.create({
+const ps = themed(() => StyleSheet.create({
   table: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.line, overflow: 'hidden' },
   tr: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.lg },
   th: { paddingVertical: space.sm, borderBottomWidth: 1, borderBottomColor: colors.line, backgroundColor: colors.surface2 },
   cName: { flex: 1 },
   cNum: { width: 64, textAlign: 'right' },
-});
+}));

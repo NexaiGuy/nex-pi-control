@@ -10,7 +10,7 @@ import { DetailScreen } from '@/components/layout';
 import { ConfirmSheet, ErrorState, Skeleton, toast, type ConfirmSpec } from '@/components/overlays';
 import { IconButton, StatusPill, T } from '@/components/primitives';
 import { t } from '@/i18n';
-import { colors, fonts, space } from '@/theme/tokens';
+import { colors, fonts, space, themed } from '@/theme/tokens';
 
 // Eenvoudige syntaxkleuring voor de leesweergave: commentaar, strings, sleutels, getallen.
 function highlight(line: string, key: number) {
@@ -160,10 +160,10 @@ export default function EditorScreen() {
   );
 }
 
-const ed = StyleSheet.create({
-  view: { flex: 1, backgroundColor: '#07070C' },
+const ed = themed(() => StyleSheet.create({
+  view: { flex: 1, backgroundColor: colors.codeBg },
   gutter: { paddingHorizontal: 8, borderRightWidth: 1, borderRightColor: colors.line, alignItems: 'flex-end' },
   ln: { fontFamily: fonts.mono, fontSize: 12, lineHeight: 18, color: colors.textFaint },
   code: { fontFamily: fonts.mono, fontSize: 12, lineHeight: 18, color: colors.text, paddingHorizontal: 10 },
-  input: { flex: 1, backgroundColor: '#07070C', color: colors.text, fontFamily: fonts.mono, fontSize: 13, lineHeight: 19, padding: space.md },
-});
+  input: { flex: 1, backgroundColor: colors.codeBg, color: colors.text, fontFamily: fonts.mono, fontSize: 13, lineHeight: 19, padding: space.md },
+}));

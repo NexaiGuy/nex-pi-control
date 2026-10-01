@@ -21,6 +21,7 @@ PATHS = [
     "/v1/containers", "/v1/sites", "/v1/processes?sort=cpu&limit=60", "/v1/processes?sort=mem&limit=60",
     "/v1/processes?sort=pid&limit=60", "/v1/processes?sort=name&limit=60", "/v1/backups", "/v1/ports", "/v1/gpio",
     "/v1/sensors", "/v1/commands", "/v1/wol", "/v1/audit?limit=200", "/v1/shell",
+    "/v1/events?limit=50", "/v1/updates", "/v1/agent/update", "/v1/actions/allowed",
 ]
 
 

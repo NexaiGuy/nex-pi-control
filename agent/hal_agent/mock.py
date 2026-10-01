@@ -11,6 +11,7 @@ import random
 import time
 from typing import Any
 
+from hal_common import VERSION
 from hal_common.i18n import L
 from hal_common.web import api_error
 
@@ -19,6 +20,7 @@ from .collectors.gpio import PINOUT
 from .config import ConfigFiles, Settings
 from .health import compute_health, counts, disk_alarms
 from .history import METRIC_CATALOG, RANGES, describe_metric, summarize
+from .maintenance import EventStore, conditions, parse_version
 
 GB = 1024**3
 
@@ -87,12 +89,27 @@ class MockBackend:
         self.gpio_values: dict[int, int] = {}
         self.shell_active_since: float | None = None
         self._net = (0.0, 0.0)
+        self.fixed_containers: set[str] = set()
+        self.events_store = EventStore(settings.state_dir / "events.db")
+        self.apt_packages = [] if self.scenario == "ok" else [
+            {"name": "openssl", "from": "3.5.1-1", "to": "3.5.1-1+deb13u1", "security": True},
+            {"name": "libssl3t64", "from": "3.5.1-1", "to": "3.5.1-1+deb13u1", "security": True},
+            {"name": "raspi-firmware", "from": "1:1.20250430-1", "to": "1:1.20250915-1", "security": False},
+            {"name": "docker-ce", "from": "5:28.4.0-1~debian.13", "to": "5:28.5.1-1~debian.13", "security": False},
+            {"name": "tzdata", "from": "2025b-4", "to": "2025b-5", "security": False},
+        ]
+        self.apt_checked_at = int(time.time()) - 2 * 3600
+        self.apt_run: dict[str, Any] = {"running": False, "state": "inactive", "result": None, "exit_status": None, "started_at": None, "finished_at": None, "log": []}
+        v = parse_version(VERSION) or (1, 0, 0)
+        self.latest_version = VERSION if self.scenario == "ok" else f"{v[0]}.{v[1]}.{v[2] + 1}"
+        self.agent_run: dict[str, Any] = {"running": False, "state": "inactive", "result": None, "exit_status": None, "started_at": None, "finished_at": None, "log": []}
+        self.events_store.sync(self._conditions(), now=int(time.time()) - 3600)
 
     async def start(self) -> None:
         return None
 
     async def stop(self) -> None:
-        return None
+        self.events_store.close()
 
     # Nepdata -------------------------------------------------------------
 
@@ -227,7 +244,7 @@ class MockBackend:
             for s in svcs:
                 n += 1
                 name = f"{proj}-{s}-1"
-                stopped = self.scenario != "ok" and name == BROKEN_CONTAINER
+                stopped = self.scenario != "ok" and name == BROKEN_CONTAINER and name not in self.fixed_containers
                 out.append({
                     "id": f"{n:02x}c0ffee{n:04x}"[:12], "name": name,
                     "image": {"postgres": "postgres:16-alpine", "redis": "redis:7-alpine"}.get(s, f"ghcr.io/example/{s}:latest"),
@@ -273,7 +290,7 @@ class MockBackend:
     def info(self) -> dict[str, Any]:
         return {"hostname": HOSTNAME, "confirm_name": self.settings.hostname_confirm or HOSTNAME, "mock": True, "gpio_available": True,
                 "shell_url": self.settings.shell_url or "http://127.0.0.1:8121", "access_configured": False,
-                "scenario": self.scenario}
+                "scenario": self.scenario, "features": ["events", "updates", "agent_update", "container_restart"]}
 
     async def overview(self) -> dict[str, Any]:
         snap, m, smart = self._snapshot(), self._mounts(), self._smart()
@@ -328,7 +345,82 @@ class MockBackend:
         return out
 
     def containers(self) -> dict[str, Any]:
-        return {"containers": self._containers(), "updated_at": int(time.time()) - 12, "error": None}
+        deny = self.config.container_restart_allowed
+        return {"containers": [{**c, "restart_allowed": deny(c["name"])} for c in self._containers()], "updated_at": int(time.time()) - 12, "error": None}
+
+    # Onderhoud ---------------------------------------------------------------
+
+    def _apt(self) -> dict[str, Any]:
+        return {"checked_at": self.apt_checked_at, "count": len(self.apt_packages), "security_count": sum(1 for p in self.apt_packages if p["security"]),
+                "packages": self.apt_packages, "reboot_required": False, "error": None}
+
+    def _conditions(self) -> dict[str, dict[str, Any]]:
+        return conditions(self._smart(), self._services(), self._containers(), self._sites(), self._apt())
+
+    def events(self, since: int, limit: int) -> dict[str, Any]:
+        self.events_store.sync(self._conditions())
+        return self.events_store.list(since, limit)
+
+    async def updates(self) -> dict[str, Any]:
+        alarms = disk_alarms(self._smart())
+        blocked = L(f"Schijf {alarms[0]['device']} toont tekenen van falen. Eerst een back-up maken, daarna pas updates installeren.",
+                    f"Disk {alarms[0]['device']} shows signs of failure. Back up first, install updates afterwards.") if alarms else None
+        return {**self._apt(), "allowed": self.config.allow("updates"), "checking": False, "upgrade": dict(self.apt_run), "blocked_reason": blocked}
+
+    async def updates_check(self) -> dict[str, Any]:
+        self.apt_checked_at = int(time.time())
+        return {"ok": True, "message": L("Controle gestart", "Check started")}
+
+    async def updates_install(self) -> dict[str, Any]:
+        if disk_alarms(self._smart()):
+            raise api_error(409, "conflict", L("Schijf toont tekenen van falen. Eerst een back-up maken.", "Disk shows signs of failure. Back up first."))
+        if self.apt_run["running"]:
+            raise api_error(409, "conflict", L("Er loopt al een update", "An update is already running"))
+        now = int(time.time())
+        pkgs = list(self.apt_packages)
+        self.apt_run = {"running": True, "state": "activating", "result": None, "exit_status": None, "started_at": now, "finished_at": None,
+                        "log": ["Reading package lists...", f"{len(pkgs)} upgraded, 0 newly installed, 0 to remove"]}
+
+        async def finish() -> None:
+            await asyncio.sleep(4)
+            self.apt_run["log"] += [f"Setting up {p['name']} ({p['to']}) ..." for p in pkgs] + ["Done"]
+            self.apt_run.update(running=False, state="inactive", result="success", exit_status=0, finished_at=int(time.time()))
+            self.apt_packages = []
+
+        asyncio.get_running_loop().create_task(finish())
+        return {"ok": True, "message": L("Updates worden geïnstalleerd", "Installing updates")}
+
+    async def agent_update(self, force: bool = False) -> dict[str, Any]:
+        avail = (parse_version(self.latest_version) or (0, 0, 0)) > (parse_version(VERSION) or (0, 0, 0))
+        return {"current": VERSION, "latest": self.latest_version, "tag": f"v{self.latest_version}",
+                "url": "https://github.com/NexaiGuy/nex-pi-control/releases", "notes": L("Kleine verbeteringen en fixes.", "Small improvements and fixes."),
+                "error": None, "update_available": avail, "allowed": self.config.allow("agent_update"), "run": dict(self.agent_run)}
+
+    async def agent_update_start(self) -> dict[str, Any]:
+        st = await self.agent_update()
+        if not st["update_available"]:
+            raise api_error(409, "conflict", L("Je hebt al de nieuwste versie", "You already have the latest version"))
+        now = int(time.time())
+        self.agent_run = {"running": True, "state": "activating", "result": None, "exit_status": None, "started_at": now, "finished_at": None,
+                          "log": [f"Downloading v{self.latest_version}", "Backup: /opt/hal-agent-backups/premigrate-demo"]}
+
+        async def finish() -> None:
+            await asyncio.sleep(4)
+            self.agent_run["log"] += ["hal-agent restarted and healthy", f"Updated to {self.latest_version}"]
+            self.agent_run.update(running=False, state="inactive", result="success", exit_status=0, finished_at=int(time.time()))
+
+        asyncio.get_running_loop().create_task(finish())
+        return {"ok": True, "message": L(f"Update naar {self.latest_version} gestart. De agent herstart zo meteen.", f"Update to {self.latest_version} started. The agent restarts shortly.")}
+
+    async def container_restart(self, ref: str) -> dict[str, Any]:
+        c = next((x for x in self._containers() if ref in (x["id"], x["name"])), None)
+        if not c:
+            raise api_error(404, "not_found", "Onbekende container")
+        if not self.config.container_restart_allowed(c["name"]):
+            raise api_error(403, "forbidden", L("Herstarten van deze container staat uit in allowed-actions.yml", "Restarting this container is disabled in allowed-actions.yml"))
+        await asyncio.sleep(0.5)
+        self.fixed_containers.add(c["name"])
+        return {"ok": True, "name": c["name"], "output": [c["name"]], "message": L(f"{c['name']} herstart", f"{c['name']} restarted")}
 
     async def container_logs(self, ref: str, lines: int) -> list[str]:
         if ref not in {c["id"] for c in self._containers()} | {c["name"] for c in self._containers()}:

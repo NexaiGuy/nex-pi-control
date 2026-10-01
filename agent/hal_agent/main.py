@@ -19,6 +19,7 @@ from hal_common.web import api_error, install_common
 
 from .config import ID_RE, UNIT_RE, Settings
 from .history import RANGES
+from .maintenance import CONTAINER_NAME_RE
 
 log = logging.getLogger("hal.agent")
 
@@ -166,6 +167,58 @@ def create_app(settings: Settings | None = None, backend=None, authenticator: Au
             raise api_error(422, "invalid_input", "Ongeldige container")
         return {"lines": await backend.container_logs(ref, lines)}
 
+    @app.post("/v1/containers/{ref}/restart", dependencies=act)
+    async def container_restart(ref: Annotated[str, Path(max_length=128)], identity: dict = Depends(auth.http_dependency)) -> dict[str, Any]:
+        if not CONTAINER_REF_RE.match(ref) or not CONTAINER_NAME_RE.match(ref):
+            raise api_error(422, "invalid_input", "Ongeldige container")
+        try:
+            res = await backend.container_restart(ref)
+        except Exception as exc:
+            audit(identity, "container:restart", ref, False, str(getattr(exc, "detail", exc))[:200])
+            raise
+        audit(identity, "container:restart", res.get("name", ref), res["ok"], "" if res["ok"] else res.get("message", ""))
+        return res
+
+    # Gebeurtenissen en updates ----------------------------------------------
+
+    @app.get("/v1/events", dependencies=read)
+    async def events(since: Annotated[int, Query(ge=0)] = 0, limit: Annotated[int, Query(ge=1, le=200)] = 50) -> dict[str, Any]:
+        return backend.events(since, limit)
+
+    @app.get("/v1/updates", dependencies=read)
+    async def updates() -> dict[str, Any]:
+        return await backend.updates()
+
+    @app.post("/v1/updates/check", dependencies=act)
+    async def updates_check(identity: dict = Depends(auth.http_dependency)) -> dict[str, Any]:
+        res = await backend.updates_check()
+        audit(identity, "updates:check", None, res["ok"])
+        return res
+
+    @app.post("/v1/updates/install", dependencies=act)
+    async def updates_install(identity: dict = Depends(auth.http_dependency)) -> dict[str, Any]:
+        try:
+            res = await backend.updates_install()
+        except Exception as exc:
+            audit(identity, "updates:install", None, False, str(getattr(exc, "detail", exc))[:200])
+            raise
+        audit(identity, "updates:install", None, res["ok"], res.get("message", ""))
+        return res
+
+    @app.get("/v1/agent/update", dependencies=read)
+    async def agent_update(refresh: bool = False) -> dict[str, Any]:
+        return await backend.agent_update(force=refresh)
+
+    @app.post("/v1/agent/update", dependencies=act)
+    async def agent_update_start(identity: dict = Depends(auth.http_dependency)) -> dict[str, Any]:
+        try:
+            res = await backend.agent_update_start()
+        except Exception as exc:
+            audit(identity, "agent:update", None, False, str(getattr(exc, "detail", exc))[:200])
+            raise
+        audit(identity, "agent:update", None, res["ok"], res.get("message", ""))
+        return res
+
     @app.get("/v1/sites", dependencies=read)
     async def sites() -> dict[str, Any]:
         return backend.sites()
@@ -242,7 +295,9 @@ def create_app(settings: Settings | None = None, backend=None, authenticator: Au
 
     @app.get("/v1/actions/allowed", dependencies=read)
     async def allowed() -> dict[str, Any]:
-        return {"restart": backend.restart_allowed()}
+        cfg = backend.config
+        return {"restart": backend.restart_allowed(), "containers": cfg.allow("containers"), "updates": cfg.allow("updates"),
+                "agent_update": cfg.allow("agent_update"), "power": cfg.allow("power")}
 
     @app.post("/v1/actions/restart-service", dependencies=act)
     async def restart_service(body: RestartBody, identity: dict = Depends(auth.http_dependency)) -> dict[str, Any]:

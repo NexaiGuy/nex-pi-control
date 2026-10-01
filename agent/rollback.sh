@@ -22,5 +22,6 @@ fi
 [[ -f "$B/50-hal-agent.rules" ]] && cp -a "$B/50-hal-agent.rules" /etc/polkit-1/rules.d/50-hal-agent.rules
 systemctl daemon-reload
 systemctl start hal-agent.service
-sleep 3
-curl -fsS http://127.0.0.1:8120/health && echo && echo "Restored $B"
+AHOST="$(grep -E '^HAL_AGENT_HOST=' /etc/hal-agent/agent.env 2>/dev/null | tail -n1 | cut -d= -f2- | tr -d '"'"'"' ')"
+for _ in $(seq 1 20); do curl -fsS "http://${AHOST:-127.0.0.1}:8120/health" >/dev/null 2>&1 && break; sleep 1; done
+curl -fsS "http://${AHOST:-127.0.0.1}:8120/health" && echo && echo "Restored $B"

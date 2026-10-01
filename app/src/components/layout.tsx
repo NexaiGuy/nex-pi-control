@@ -10,9 +10,11 @@ import { t } from '@/i18n';
 import { clock } from '@/lib/format';
 import { connectionStore, serverName } from '@/state/settings';
 import { useStore } from '@/state/store';
-import { colors, fonts, radius, space } from '@/theme/tokens';
+import { colors, fonts, radius, space, themed } from '@/theme/tokens';
 
-import { Icon, IconButton, T } from './primitives';
+import { ServerSwitcher } from '@/features/servers/ServerSwitcher';
+
+import { Icon, IconButton, NeonLine, T } from './primitives';
 
 function useNow(ms = 1000): number {
   const [now, setNow] = useState(() => Date.now());
@@ -69,10 +71,12 @@ export function LiveIndicator() {
 export function AppHeader({ title, right }: { title?: string; right?: ReactNode }) {
   const conn = useStore(connectionStore);
   const server = serverName(conn);
+  const [switcher, setSwitcher] = useState(false);
   return (
     <View style={h.header}>
+      <ServerSwitcher visible={switcher} onClose={() => setSwitcher(false)} />
       <View style={{ flex: 1, gap: 4 }}>
-        <Pressable style={h.server} accessibilityRole="button" accessibilityLabel={`${t.common.server}: ${server}`} onPress={() => router.push('/device')}>
+        <Pressable style={h.server} accessibilityRole="button" accessibilityLabel={`${t.common.server}: ${server}`} onPress={() => setSwitcher(true)}>
           <View style={h.serverIcon}>
             <Icon name="cpu" size={12} color={colors.purple} />
           </View>
@@ -117,10 +121,10 @@ export function DiskBanner() {
     >
       <Icon name="alert-octagon" size={20} color={colors.red} />
       <View style={{ flex: 1, gap: 2 }}>
-        <T v="h3" style={{ color: '#FFD9DB' }}>
+        <T v="h3" style={{ color: colors.bannerTitle }}>
           {t.disk.banner(first.device)}
         </T>
-        <T v="caption" style={{ color: '#F4A6AA' }} numberOfLines={1}>
+        <T v="caption" style={{ color: colors.bannerText }} numberOfLines={1}>
           {first.reasons[0]}
           {alarms.length > 1 ? ` · +${alarms.length - 1}` : ''}
         </T>
@@ -157,6 +161,7 @@ export function Screen({
   const header = (
     <>
       <AppHeader title={title} right={right} />
+      <NeonLine style={{ marginBottom: space.md, opacity: 0.9 }} />
       <DiskBanner />
       <OfflineNotice at={dataUpdatedAt} />
     </>
@@ -196,6 +201,7 @@ export function DetailScreen({ title, children, onRefresh, refreshing = false, r
         </T>
         {right}
       </View>
+      <NeonLine style={{ marginBottom: space.md, opacity: 0.9 }} />
       <DiskBanner />
       <OfflineNotice />
     </>
@@ -221,7 +227,7 @@ export function DetailScreen({ title, children, onRefresh, refreshing = false, r
   );
 }
 
-const h = StyleSheet.create({
+const h = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'flex-start', paddingTop: space.md, paddingBottom: space.md, gap: space.md },
   server: {
@@ -241,4 +247,4 @@ const h = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.amberSoft, borderRadius: radius.md, padding: space.md, marginBottom: space.md,
   },
   detailHead: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingVertical: space.sm, marginLeft: -space.md },
-});
+}));

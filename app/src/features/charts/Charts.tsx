@@ -6,7 +6,7 @@ import Svg, { Circle, Defs, G, Line, LinearGradient, Path, Rect, Stop, Text as S
 
 import type { Point } from '@/api/types';
 import { unitValue } from '@/lib/format';
-import { colors, fonts } from '@/theme/tokens';
+import { colors, fonts, themed } from '@/theme/tokens';
 
 type XY = { x: number; y: number };
 
@@ -256,11 +256,11 @@ export function HealthRing({ level, size = 88, progress = 1, children }: { level
   );
 }
 
-const st = StyleSheet.create({
+const st = themed(() => StyleSheet.create({
   tip: {
     position: 'absolute', top: 4, minWidth: 140, backgroundColor: colors.surface2, borderColor: colors.lineStrong, borderWidth: 1,
     borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, gap: 2,
   },
   tipTime: { fontFamily: fonts.mono, fontSize: 10, color: colors.textMuted },
   tipVal: { fontFamily: fonts.monoMedium, fontSize: 12, color: colors.text },
-});
+}));

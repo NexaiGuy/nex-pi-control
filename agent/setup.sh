@@ -113,13 +113,14 @@ install -d -o root -g root -m 0755 "$APP" "$APP/bin" "$APP/docker"
 install -d -o root -g root -m 0755 "$ETC"
 install -d -o halagent -g halagent -m 0750 "$STATE"
 install -d -o root -g halagent -m 0750 "$STATE/smart"
+install -d -o root -g halagent -m 0750 "$STATE/apt"
 for pkg in hal_common hal_agent hal_agent/collectors hal_shell; do
   install -d -o root -g root -m 0755 "$APP/$pkg"
   find "$SRC/$pkg" -maxdepth 1 -type f -name '*.py' -exec install -o root -g root -m 0644 {} "$APP/$pkg/" \;
 done
 for f in requirements.txt requirements-pi.txt README.md; do install -o root -g root -m 0644 "$SRC/$f" "$APP/$f"; done
 install -o root -g root -m 0644 "$SRC/docker/docker-compose.yml" "$APP/docker/docker-compose.yml"
-for b in "$SRC"/bin/*; do install -o root -g root -m 0755 "$b" "$APP/bin/$(basename "$b")"; done
+for b in "$SRC"/bin/*; do if [[ -f "$b" ]]; then install -o root -g root -m 0755 "$b" "$APP/bin/$(basename "$b")"; fi; done
 install -o root -g root -m 0755 "$SRC/deploy.sh" "$APP/deploy.sh"
 install -o root -g root -m 0755 "$SRC/rollback.sh" "$APP/rollback.sh"
 c_ok "Code installed in $APP (owned by root, read-only for the agent)"
@@ -234,7 +235,8 @@ install -d -m 0755 /etc/polkit-1/rules.d
 c_ok "polkit rule: halagent may only run the fixed actions from allowed-actions.yml and commands.yml"
 
 # 9. systemd -------------------------------------------------------------------------------------------------
-for u in hal-agent.service hal-smart-collect.service hal-smart-collect.timer 'hal-cmd@.service'; do
+for u in hal-agent.service hal-smart-collect.service hal-smart-collect.timer 'hal-cmd@.service' 'hal-container@.service' \
+         hal-apt-check.service hal-apt-check.timer hal-apt-upgrade.service hal-agent-update.service; do
   install -o root -g root -m 0644 "$SRC/systemd/$u" "/etc/systemd/system/$u"
 done
 sed -e "s/@SHELL_USER@/$SHELL_USER/g" -e "s/@SHELL_GROUP@/$SHELL_GROUP/g" "$SRC/systemd/hal-shell.service" > /etc/systemd/system/hal-shell.service
@@ -260,6 +262,7 @@ fi
 
 # 11. Start ------------------------------------------------------------------------------------------------------
 systemctl enable --now hal-smart-collect.timer >/dev/null
+systemctl enable --now hal-apt-check.timer >/dev/null
 systemctl start hal-smart-collect.service || c_warn "First SMART run reported an error: journalctl -u hal-smart-collect"
 systemctl enable hal-agent.service >/dev/null
 systemctl restart hal-agent.service

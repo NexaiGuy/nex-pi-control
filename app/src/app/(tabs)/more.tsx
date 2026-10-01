@@ -1,11 +1,12 @@
 import { router, type Href } from 'expo-router';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
-import { useOverview, useShellState } from '@/api/hooks';
+import { useEvents, useInfo, useOverview, useShellState, useUpdates } from '@/api/hooks';
+import { supports } from '@/lib/agent';
 import { Screen } from '@/components/layout';
 import { Card, Icon, SectionTitle, T, type IconName } from '@/components/primitives';
 import { t } from '@/i18n';
-import { colors, radius, space } from '@/theme/tokens';
+import { colors, radius, space, themed } from '@/theme/tokens';
 
 interface Tool {
   href: Href;
@@ -21,6 +22,12 @@ export default function MoreScreen() {
   const overview = useOverview();
   const shell = useShellState(false);
   const diskAlarm = (overview.data?.disk_alarms.length ?? 0) > 0;
+  const info = useInfo();
+  const hasMaint = supports(info.data, 'updates');
+  const events = useEvents(hasMaint);
+  const updates = useUpdates(false, hasMaint);
+  const openEvents = hasMaint ? (events.data?.open ?? 0) : 0;
+  const aptCount = hasMaint ? (updates.data?.count ?? 0) : 0;
 
   const groups: { title: string; tools: Tool[] }[] = [
     {
@@ -45,6 +52,8 @@ export default function MoreScreen() {
     {
       title: t.more.overview,
       tools: [
+        { href: '/events', icon: 'bell', label: t.more.events, tint: openEvents ? colors.amber : undefined, hint: openEvents ? t.events.open(openEvents) : undefined },
+        { href: '/updates', icon: 'download', label: t.more.updates, tint: updates.data?.security_count && hasMaint ? colors.amber : undefined, hint: aptCount ? t.more.updatesCount(aptCount) : undefined },
         { href: '/backups', icon: 'archive', label: t.more.backups },
         { href: '/ports', icon: 'hash', label: t.more.ports },
         { href: '/audit', icon: 'list', label: t.more.audit },
@@ -83,8 +92,8 @@ export default function MoreScreen() {
   );
 }
 
-const m = StyleSheet.create({
+const m = themed(() => StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
   tool: { aspectRatio: 1, padding: space.md, gap: 6, justifyContent: 'flex-end', borderRadius: radius.lg },
   icon: { position: 'absolute', top: space.md, left: space.md, width: 40, height: 40, borderRadius: 12, backgroundColor: colors.purpleSoft, alignItems: 'center', justifyContent: 'center' },
-});
+}));

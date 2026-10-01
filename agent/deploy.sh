@@ -49,11 +49,13 @@ done
 place "$SRC/README.md" "$APP/README.md" 0644 || true
 place "$SRC/docker/docker-compose.yml" "$APP/docker/docker-compose.yml" 0644 || true
 for b in "$SRC"/bin/*; do
+  [[ -f "$b" ]] || continue
   place "$b" "$APP/bin/$(basename "$b")" 0755 && { [[ "$(basename "$b")" == hal-apply-config ]] && POLKIT_CHANGED=1; } || true
 done
 place "$SRC/deploy.sh" "$APP/deploy.sh" 0755 || true
 place "$SRC/rollback.sh" "$APP/rollback.sh" 0755 || true
-for u in hal-agent.service hal-smart-collect.service hal-smart-collect.timer 'hal-cmd@.service'; do
+for u in hal-agent.service hal-smart-collect.service hal-smart-collect.timer 'hal-cmd@.service' 'hal-container@.service' \
+         hal-apt-check.service hal-apt-check.timer hal-apt-upgrade.service hal-agent-update.service; do
   place "$SRC/systemd/$u" "/etc/systemd/system/$u" 0644 && UNITS_CHANGED=1 || true
 done
 TMPU="$(mktemp)"
@@ -66,6 +68,9 @@ for f in "$SRC"/config/*.yml; do
   if [[ ! -f "$ETC/$n" ]]; then install -o root -g halagent -m 0640 "$f" "$ETC/$n"; CHANGED+=("etc/hal-agent/$n (new)"); fi
 done
 
+# Folders for newer features (only created when missing).
+[[ -d /var/lib/hal-agent/apt ]] || { install -d -o root -g halagent -m 0750 /var/lib/hal-agent/apt; CHANGED+=("var/lib/hal-agent/apt (new)"); }
+
 if ((REQ_CHANGED)); then
   "$APP/venv/bin/pip" install -q --no-cache-dir -r "$APP/requirements.txt"
   "$APP/venv/bin/pip" install -q --no-cache-dir -r "$APP/requirements-pi.txt" || echo "GPIO library not updated (not critical)"
@@ -74,10 +79,16 @@ fi
 find "$APP" -name '__pycache__' -prune -exec rm -rf {} +
 ((POLKIT_CHANGED)) && "$APP/bin/hal-apply-config"
 ((UNITS_CHANGED)) && systemctl daemon-reload
+# New timers are enabled once; timers you already had keep running as they were.
+if [[ -f /etc/systemd/system/hal-apt-check.timer ]] && ! systemctl is-enabled --quiet hal-apt-check.timer 2>/dev/null; then
+  systemctl enable --now hal-apt-check.timer >/dev/null && CHANGED+=("hal-apt-check.timer enabled")
+fi
 if ((CODE_CHANGED || UNITS_CHANGED)); then
   systemctl restart hal-agent.service
-  for _ in $(seq 1 20); do curl -fsS http://127.0.0.1:8120/health >/dev/null 2>&1 && break; sleep 1; done
-  if ! curl -fsS http://127.0.0.1:8120/health >/dev/null; then
+  AHOST="$(grep -E '^HAL_AGENT_HOST=' "$ETC/agent.env" 2>/dev/null | tail -n1 | cut -d= -f2- | tr -d '"'"'"' ')"
+  HEALTH="http://${AHOST:-127.0.0.1}:8120/health"
+  for _ in $(seq 1 20); do curl -fsS "$HEALTH" >/dev/null 2>&1 && break; sleep 1; done
+  if ! curl -fsS "$HEALTH" >/dev/null; then
     echo "ERROR: hal-agent does not start after the update. Roll back with:"
     echo "  sudo bash $APP/rollback.sh $BACKUP"
     exit 1
@@ -91,7 +102,7 @@ echo
 echo "Changed (${#CHANGED[@]}):"
 for c in "${CHANGED[@]}"; do echo "  - /$c"; done
 echo "Unchanged: $SAME files"
-echo "Services: $RESTARTED. hal-shell and the SMART timer keep running as they were."
+echo "Services: $RESTARTED. hal-shell and the timers keep running as they were."
 echo "Your configuration in $ETC and your tokens were not touched."
 echo
 echo "Roll back: sudo bash $APP/rollback.sh $BACKUP"

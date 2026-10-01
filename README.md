@@ -19,8 +19,12 @@ Everything runs directly between your phone and your own Pi. There is no cloud o
 | **System** | systemd services with logs and restart, Docker containers, your websites with latency and TLS expiry, processes |
 | **Hardware** | GPIO header with safe switching and pulses, 1-wire, DHT and BMP280 sensors, Wake-on-LAN, pinout reference |
 | **Admin mode** | Terminal with multiple tabs and snippets, file manager with editor, upload and download. Off by default, stops by itself |
-| **Actions** | Your own commands, restart, power off, all with hold-to-confirm and an audit log |
-| **Alerts** | Local notifications for a failing disk, failed services, sites down, heat and old backups. No push server |
+| **Actions** | Your own commands, restart services and containers, power off, all with hold-to-confirm and an audit log |
+| **Alerts** | The Pi keeps a log of what goes wrong and recovers (disks, services, containers, sites, security updates). Your phone turns it into notifications, for every Pi you added. No push server |
+| **Updates** | System updates (apt) and the agent itself from the app, with backup and automatic rollback |
+| **Several Pi's** | Add up to 10 servers and switch from the top of every screen |
+| **Widget** | Home screen widget with status, temperature, CPU and disk |
+| **Look** | Dark and light theme (follows your phone), English and Dutch |
 | **Security** | Fingerprint lock, tokens in the Android Keystore, screenshots blocked on sensitive screens |
 
 Languages: English and Dutch (follows your phone).

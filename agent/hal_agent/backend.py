@@ -7,6 +7,7 @@ import logging
 import time
 from typing import Any
 
+from hal_common import VERSION
 from hal_common.i18n import L, tr
 from hal_common.web import api_error, run
 
@@ -22,6 +23,17 @@ from .collectors.system import SystemSampler, device_info, mounts
 from .config import ConfigFiles, Settings
 from .health import compute_health, counts, disk_alarms
 from .history import METRIC_CATALOG, HistoryStore, describe_metric
+from .maintenance import (
+    AGENT_UPDATE_UNIT,
+    APT_CHECK_UNIT,
+    APT_UPGRADE_UNIT,
+    EventStore,
+    ReleaseChecker,
+    conditions,
+    container_unit,
+    read_apt_status,
+    update_available,
+)
 
 log = logging.getLogger("hal.backend")
 
@@ -35,6 +47,9 @@ class RealBackend:
         settings.state_dir.mkdir(parents=True, exist_ok=True)
         self.audit_log = AuditLog(settings.state_dir / "audit.db")
         self.history = HistoryStore(settings.state_dir / "history.db")
+        self.events_store = EventStore(settings.state_dir / "events.db")
+        self.apt_path = settings.state_dir / "apt" / "status.json"
+        self.releases = ReleaseChecker(settings.update_repo, settings.update_check)
         self.sampler = SystemSampler()
         self.smart = SmartStore(settings.state_dir / "smart", settings.state_dir / "smart-crc.json")
         self.services_c = ServiceCollector()
@@ -58,6 +73,7 @@ class RealBackend:
             asyncio.create_task(self._loop_every(30, self._refresh_services), name="services"),
             asyncio.create_task(self._loop_every(60, self._refresh_sensors), name="sensors"),
             asyncio.create_task(self._loop_every(60, self._maintain), name="maintain"),
+            asyncio.create_task(self._loop_events(), name="events"),
         ]
 
     async def stop(self) -> None:
@@ -66,6 +82,7 @@ class RealBackend:
         await asyncio.gather(*self._tasks, return_exceptions=True)
         self.gpio.close()
         self.history.close()
+        self.events_store.close()
 
     async def _loop_every(self, seconds: float, fn) -> None:
         while True:
@@ -123,6 +140,16 @@ class RealBackend:
                 prev = self.sensor_values.get(s["id"], {})
                 self.sensor_values[s["id"]] = {"values": prev.get("values"), "error": str(exc)[:200], "ts": prev.get("ts")}
 
+    async def _loop_events(self) -> None:
+        # Eerst de collectors een ronde laten draaien, anders lijkt alles "opgelost" bij de start.
+        await asyncio.sleep(45)
+        await self._loop_every(30, self._refresh_events)
+
+    async def _refresh_events(self) -> None:
+        conds = conditions(self.smart.read_all(), self._services_snapshot, self.containers_c.cached()["containers"],
+                           list(self.sites_c.results.values()), read_apt_status(self.apt_path))
+        await asyncio.to_thread(self.events_store.sync, conds)
+
     async def _maintain(self) -> None:
         await asyncio.to_thread(self.history.maintain)
 
@@ -141,6 +168,7 @@ class RealBackend:
             "gpio_available": self.gpio.available,
             "shell_url": self.settings.shell_url,
             "access_configured": bool(self.settings.team_domain and self.settings.aud),
+            "features": ["events", "updates", "agent_update", "container_restart"],
         }
 
     def _backups(self) -> list[dict[str, Any]]:
@@ -200,7 +228,8 @@ class RealBackend:
         return await self.services_c.logs(name, lines)
 
     def containers(self) -> dict[str, Any]:
-        return self.containers_c.cached()
+        data = self.containers_c.cached()
+        return {**data, "containers": [{**c, "restart_allowed": self.config.container_restart_allowed(c["name"])} for c in data["containers"]]}
 
     async def container_logs(self, ref: str, lines: int) -> list[str]:
         cid = self.containers_c.resolve(ref)
@@ -316,6 +345,71 @@ class RealBackend:
     async def shell_stop(self) -> dict[str, Any]:
         ok, msg = await actions.stop_unit(actions.SHELL_UNIT)
         return {"ok": ok, "message": msg or (L("Beheermodus gestopt", "Admin mode stopped") if ok else L("Stoppen mislukt", "Stop failed"))}
+
+    # Onderhoud: gebeurtenissen, updates, containers --------------------------
+
+    def events(self, since: int, limit: int) -> dict[str, Any]:
+        return self.events_store.list(since, limit)
+
+    def _disk_blocked(self) -> str | None:
+        alarms = disk_alarms(self.smart.read_all())
+        if alarms:
+            return L(f"Schijf {alarms[0]['device']} toont tekenen van falen. Eerst een back-up maken, daarna pas updates installeren.",
+                     f"Disk {alarms[0]['device']} shows signs of failure. Back up first, install updates afterwards.")
+        return None
+
+    async def updates(self) -> dict[str, Any]:
+        apt = read_apt_status(self.apt_path)
+        upgrade = await actions.unit_run_info(APT_UPGRADE_UNIT, max_lines=200)
+        check = await actions.unit_state(APT_CHECK_UNIT)
+        return {**apt, "allowed": self.config.allow("updates"), "checking": check["active"], "upgrade": upgrade,
+                "blocked_reason": self._disk_blocked()}
+
+    async def updates_check(self) -> dict[str, Any]:
+        if not self.config.allow("updates"):
+            raise api_error(403, "forbidden", L("Systeemupdates staan uit in allowed-actions.yml", "System updates are disabled in allowed-actions.yml"))
+        ok, msg = await actions.start_unit_nowait(APT_CHECK_UNIT)
+        return {"ok": ok, "message": msg or (L("Controle gestart", "Check started") if ok else L("Starten mislukt", "Start failed"))}
+
+    async def updates_install(self) -> dict[str, Any]:
+        if not self.config.allow("updates"):
+            raise api_error(403, "forbidden", L("Systeemupdates staan uit in allowed-actions.yml", "System updates are disabled in allowed-actions.yml"))
+        blocked = self._disk_blocked()
+        if blocked:
+            raise api_error(409, "conflict", blocked)
+        if (await actions.unit_run_info(APT_UPGRADE_UNIT, max_lines=1))["running"]:
+            raise api_error(409, "conflict", L("Er loopt al een update", "An update is already running"))
+        ok, msg = await actions.start_unit_nowait(APT_UPGRADE_UNIT)
+        return {"ok": ok, "message": msg or (L("Updates worden geïnstalleerd", "Installing updates") if ok else L("Starten mislukt", "Start failed"))}
+
+    async def agent_update(self, force: bool = False) -> dict[str, Any]:
+        latest = await self.releases.latest(force=force)
+        run_info = await actions.unit_run_info(AGENT_UPDATE_UNIT, max_lines=200)
+        return {"current": VERSION, "latest": latest["version"], "tag": latest["tag"], "url": latest["url"], "notes": latest["notes"],
+                "error": latest["error"], "update_available": update_available(VERSION, latest["version"]),
+                "allowed": self.config.allow("agent_update"), "run": run_info}
+
+    async def agent_update_start(self) -> dict[str, Any]:
+        if not self.config.allow("agent_update"):
+            raise api_error(403, "forbidden", L("Agent-updates staan uit in allowed-actions.yml", "Agent updates are disabled in allowed-actions.yml"))
+        st = await self.agent_update(force=True)
+        if not st["update_available"]:
+            raise api_error(409, "conflict", L("Je hebt al de nieuwste versie", "You already have the latest version"))
+        if st["run"]["running"]:
+            raise api_error(409, "conflict", L("De update loopt al", "The update is already running"))
+        ok, msg = await actions.start_unit_nowait(AGENT_UPDATE_UNIT)
+        return {"ok": ok, "message": msg or (L(f"Update naar {st['latest']} gestart. De agent herstart zo meteen.", f"Update to {st['latest']} started. The agent restarts shortly.") if ok else L("Starten mislukt", "Start failed"))}
+
+    async def container_restart(self, ref: str) -> dict[str, Any]:
+        cid = self.containers_c.resolve(ref)
+        c = next((x for x in self.containers_c.cached()["containers"] if x["id"] == cid), None)
+        if not c:
+            raise api_error(404, "not_found", "Onbekende container")
+        if not self.config.container_restart_allowed(c["name"]):
+            raise api_error(403, "forbidden", L("Herstarten van deze container staat uit in allowed-actions.yml", "Restarting this container is disabled in allowed-actions.yml"))
+        ok, lines, reason = await actions.run_oneshot(container_unit(c["name"]), 120)
+        self._spawn(self._refresh_containers())
+        return {"ok": ok, "name": c["name"], "output": lines[-20:], "message": reason or (L(f"{c['name']} herstart", f"{c['name']} restarted") if ok else L("Herstarten mislukt", "Restart failed"))}
 
     # Statistieken -----------------------------------------------------------
 

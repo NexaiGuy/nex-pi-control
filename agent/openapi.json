@@ -1,1169 +1,1386 @@
 {
- "openapi": "3.1.0",
- "info": {
-  "title": "hal-agent",
-  "version": "1.1.0"
- },
- "paths": {
-  "/health": {
-   "get": {
-    "summary": "Health",
-    "operationId": "health_health_get",
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "additionalProperties": true,
-         "type": "object",
-         "title": "Response Health Health Get"
-        }
-       }
-      }
-     }
-    }
-   }
+  "openapi": "3.1.0",
+  "info": {
+    "title": "hal-agent",
+    "version": "1.2.0"
   },
-  "/v1/info": {
-   "get": {
-    "summary": "Info",
-    "operationId": "info_v1_info_get",
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "additionalProperties": true,
-         "type": "object",
-         "title": "Response Info V1 Info Get"
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
         }
-       }
       }
-     }
-    }
-   }
-  },
-  "/v1/overview": {
-   "get": {
-    "summary": "Overview",
-    "operationId": "overview_v1_overview_get",
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "additionalProperties": true,
-         "type": "object",
-         "title": "Response Overview V1 Overview Get"
+    },
+    "/v1/info": {
+      "get": {
+        "summary": "Info",
+        "operationId": "info_v1_info_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Info V1 Info Get"
+                }
+              }
+            }
+          }
         }
-       }
       }
-     }
-    }
-   }
-  },
-  "/v1/device": {
-   "get": {
-    "summary": "Device",
-    "operationId": "device_v1_device_get",
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "additionalProperties": true,
-         "type": "object",
-         "title": "Response Device V1 Device Get"
+    },
+    "/v1/overview": {
+      "get": {
+        "summary": "Overview",
+        "operationId": "overview_v1_overview_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Overview V1 Overview Get"
+                }
+              }
+            }
+          }
         }
-       }
       }
-     }
-    }
-   }
-  },
-  "/v1/disks": {
-   "get": {
-    "summary": "Disks",
-    "operationId": "disks_v1_disks_get",
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "additionalProperties": true,
-         "type": "object",
-         "title": "Response Disks V1 Disks Get"
+    },
+    "/v1/device": {
+      "get": {
+        "summary": "Device",
+        "operationId": "device_v1_device_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Device V1 Device Get"
+                }
+              }
+            }
+          }
         }
-       }
       }
-     }
-    }
-   }
-  },
-  "/v1/disks/acknowledge-crc": {
-   "post": {
-    "summary": "Ack Crc",
-    "operationId": "ack_crc_v1_disks_acknowledge_crc_post",
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "additionalProperties": true,
-         "type": "object",
-         "title": "Response Ack Crc V1 Disks Acknowledge Crc Post"
+    },
+    "/v1/disks": {
+      "get": {
+        "summary": "Disks",
+        "operationId": "disks_v1_disks_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Disks V1 Disks Get"
+                }
+              }
+            }
+          }
         }
-       }
       }
-     }
-    }
-   }
-  },
-  "/v1/stats/metrics": {
-   "get": {
-    "summary": "Stats Metrics",
-    "operationId": "stats_metrics_v1_stats_metrics_get",
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "items": {
-          "additionalProperties": {
-           "type": "string"
+    },
+    "/v1/disks/acknowledge-crc": {
+      "post": {
+        "summary": "Ack Crc",
+        "operationId": "ack_crc_v1_disks_acknowledge_crc_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Ack Crc V1 Disks Acknowledge Crc Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/stats/metrics": {
+      "get": {
+        "summary": "Stats Metrics",
+        "operationId": "stats_metrics_v1_stats_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response Stats Metrics V1 Stats Metrics Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/stats/history": {
+      "get": {
+        "summary": "Stats History",
+        "operationId": "stats_history_v1_stats_history_get",
+        "parameters": [
+          {
+            "name": "metric",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000,
+              "title": "Metric"
+            }
           },
-          "type": "object"
-         },
-         "type": "array",
-         "title": "Response Stats Metrics V1 Stats Metrics Get"
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "1h",
+                "6h",
+                "24h",
+                "7d",
+                "30d"
+              ],
+              "type": "string",
+              "default": "1h",
+              "title": "Range"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Stats History V1 Stats History Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
         }
-       }
       }
-     }
-    }
-   }
-  },
-  "/v1/stats/history": {
-   "get": {
-    "summary": "Stats History",
-    "operationId": "stats_history_v1_stats_history_get",
-    "parameters": [
-     {
-      "name": "metric",
-      "in": "query",
-      "required": true,
-      "schema": {
-       "type": "string",
-       "minLength": 1,
-       "maxLength": 2000,
-       "title": "Metric"
-      }
-     },
-     {
-      "name": "range",
-      "in": "query",
-      "required": false,
-      "schema": {
-       "enum": [
-        "1h",
-        "6h",
-        "24h",
-        "7d",
-        "30d"
-       ],
-       "type": "string",
-       "default": "1h",
-       "title": "Range"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "type": "object",
-         "additionalProperties": true,
-         "title": "Response Stats History V1 Stats History Get"
-        }
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/stats/export": {
-   "get": {
-    "summary": "Stats Export",
-    "operationId": "stats_export_v1_stats_export_get",
-    "parameters": [
-     {
-      "name": "metric",
-      "in": "query",
-      "required": true,
-      "schema": {
-       "type": "string",
-       "pattern": "^[a-z0-9_.:/@-]{1,120}$",
-       "title": "Metric"
-      }
-     },
-     {
-      "name": "range",
-      "in": "query",
-      "required": false,
-      "schema": {
-       "enum": [
-        "1h",
-        "6h",
-        "24h",
-        "7d",
-        "30d"
-       ],
-       "type": "string",
-       "default": "24h",
-       "title": "Range"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "text/plain": {
-        "schema": {
-         "type": "string"
-        }
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/services": {
-   "get": {
-    "summary": "Services",
-    "operationId": "services_v1_services_get",
-    "parameters": [
-     {
-      "name": "filter",
-      "in": "query",
-      "required": false,
-      "schema": {
-       "enum": [
-        "all",
-        "custom",
-        "failed",
-        "active"
-       ],
-       "type": "string",
-       "default": "all",
-       "title": "Filter"
-      }
-     },
-     {
-      "name": "q",
-      "in": "query",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string",
-         "maxLength": 60
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "Q"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "type": "array",
-         "items": {
-          "type": "object",
-          "additionalProperties": true
-         },
-         "title": "Response Services V1 Services Get"
-        }
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/services/{name}/logs": {
-   "get": {
-    "summary": "Service Logs",
-    "operationId": "service_logs_v1_services__name__logs_get",
-    "parameters": [
-     {
-      "name": "name",
-      "in": "path",
-      "required": true,
-      "schema": {
-       "type": "string",
-       "maxLength": 200,
-       "title": "Name"
-      }
-     },
-     {
-      "name": "lines",
-      "in": "query",
-      "required": false,
-      "schema": {
-       "type": "integer",
-       "maximum": 500,
-       "minimum": 1,
-       "default": 50,
-       "title": "Lines"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "type": "array",
-         "items": {
-          "type": "object",
-          "additionalProperties": true
-         },
-         "title": "Response Service Logs V1 Services  Name  Logs Get"
-        }
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/containers": {
-   "get": {
-    "summary": "Containers",
-    "operationId": "containers_v1_containers_get",
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "additionalProperties": true,
-         "type": "object",
-         "title": "Response Containers V1 Containers Get"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/containers/{ref}/logs": {
-   "get": {
-    "summary": "Container Logs",
-    "operationId": "container_logs_v1_containers__ref__logs_get",
-    "parameters": [
-     {
-      "name": "ref",
-      "in": "path",
-      "required": true,
-      "schema": {
-       "type": "string",
-       "maxLength": 128,
-       "title": "Ref"
-      }
-     },
-     {
-      "name": "lines",
-      "in": "query",
-      "required": false,
-      "schema": {
-       "type": "integer",
-       "maximum": 500,
-       "minimum": 1,
-       "default": 100,
-       "title": "Lines"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "type": "object",
-         "additionalProperties": true,
-         "title": "Response Container Logs V1 Containers  Ref  Logs Get"
-        }
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/sites": {
-   "get": {
-    "summary": "Sites",
-    "operationId": "sites_v1_sites_get",
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "additionalProperties": true,
-         "type": "object",
-         "title": "Response Sites V1 Sites Get"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/processes": {
-   "get": {
-    "summary": "Processes",
-    "operationId": "processes_v1_processes_get",
-    "parameters": [
-     {
-      "name": "sort",
-      "in": "query",
-      "required": false,
-      "schema": {
-       "enum": [
-        "cpu",
-        "mem",
-        "pid",
-        "name"
-       ],
-       "type": "string",
-       "default": "cpu",
-       "title": "Sort"
-      }
-     },
-     {
-      "name": "limit",
-      "in": "query",
-      "required": false,
-      "schema": {
-       "type": "integer",
-       "maximum": 300,
-       "minimum": 1,
-       "default": 30,
-       "title": "Limit"
-      }
-     },
-     {
-      "name": "q",
-      "in": "query",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "type": "string",
-         "maxLength": 60
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "Q"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "type": "array",
-         "items": {
-          "type": "object",
-          "additionalProperties": true
-         },
-         "title": "Response Processes V1 Processes Get"
-        }
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/backups": {
-   "get": {
-    "summary": "Backups",
-    "operationId": "backups_v1_backups_get",
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "items": {
-          "additionalProperties": true,
-          "type": "object"
-         },
-         "type": "array",
-         "title": "Response Backups V1 Backups Get"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/ports": {
-   "get": {
-    "summary": "Ports",
-    "operationId": "ports_v1_ports_get",
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "additionalProperties": true,
-         "type": "object",
-         "title": "Response Ports V1 Ports Get"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/gpio": {
-   "get": {
-    "summary": "Gpio",
-    "operationId": "gpio_v1_gpio_get",
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "additionalProperties": true,
-         "type": "object",
-         "title": "Response Gpio V1 Gpio Get"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/gpio/{pin}": {
-   "post": {
-    "summary": "Gpio Action",
-    "operationId": "gpio_action_v1_gpio__pin__post",
-    "parameters": [
-     {
-      "name": "pin",
-      "in": "path",
-      "required": true,
-      "schema": {
-       "type": "integer",
-       "maximum": 27,
-       "minimum": 0,
-       "title": "Pin"
-      }
-     }
-    ],
-    "requestBody": {
-     "required": true,
-     "content": {
-      "application/json": {
-       "schema": {
-        "$ref": "#/components/schemas/GpioBody"
-       }
-      }
-     }
     },
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "type": "object",
-         "additionalProperties": true,
-         "title": "Response Gpio Action V1 Gpio  Pin  Post"
+    "/v1/stats/export": {
+      "get": {
+        "summary": "Stats Export",
+        "operationId": "stats_export_v1_stats_export_get",
+        "parameters": [
+          {
+            "name": "metric",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9_.:/@-]{1,120}$",
+              "title": "Metric"
+            }
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "1h",
+                "6h",
+                "24h",
+                "7d",
+                "30d"
+              ],
+              "type": "string",
+              "default": "24h",
+              "title": "Range"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
         }
-       }
       }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/sensors": {
-   "get": {
-    "summary": "Sensors",
-    "operationId": "sensors_v1_sensors_get",
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "additionalProperties": true,
-         "type": "object",
-         "title": "Response Sensors V1 Sensors Get"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/commands": {
-   "get": {
-    "summary": "Commands",
-    "operationId": "commands_v1_commands_get",
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "items": {
-          "additionalProperties": true,
-          "type": "object"
-         },
-         "type": "array",
-         "title": "Response Commands V1 Commands Get"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/commands/{cmd_id}/run": {
-   "post": {
-    "summary": "Run Command",
-    "operationId": "run_command_v1_commands__cmd_id__run_post",
-    "parameters": [
-     {
-      "name": "cmd_id",
-      "in": "path",
-      "required": true,
-      "schema": {
-       "type": "string",
-       "maxLength": 41,
-       "title": "Cmd Id"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "type": "object",
-         "additionalProperties": true,
-         "title": "Response Run Command V1 Commands  Cmd Id  Run Post"
-        }
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/wol": {
-   "get": {
-    "summary": "Wol",
-    "operationId": "wol_v1_wol_get",
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "items": {
-          "additionalProperties": true,
-          "type": "object"
-         },
-         "type": "array",
-         "title": "Response Wol V1 Wol Get"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/wol/{dev_id}": {
-   "post": {
-    "summary": "Wol Send",
-    "operationId": "wol_send_v1_wol__dev_id__post",
-    "parameters": [
-     {
-      "name": "dev_id",
-      "in": "path",
-      "required": true,
-      "schema": {
-       "type": "string",
-       "maxLength": 41,
-       "title": "Dev Id"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "type": "object",
-         "additionalProperties": true,
-         "title": "Response Wol Send V1 Wol  Dev Id  Post"
-        }
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/audit": {
-   "get": {
-    "summary": "Audit Log",
-    "operationId": "audit_log_v1_audit_get",
-    "parameters": [
-     {
-      "name": "limit",
-      "in": "query",
-      "required": false,
-      "schema": {
-       "type": "integer",
-       "maximum": 500,
-       "minimum": 1,
-       "default": 100,
-       "title": "Limit"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "type": "array",
-         "items": {
-          "type": "object",
-          "additionalProperties": true
-         },
-         "title": "Response Audit Log V1 Audit Get"
-        }
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/actions/allowed": {
-   "get": {
-    "summary": "Allowed",
-    "operationId": "allowed_v1_actions_allowed_get",
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "additionalProperties": true,
-         "type": "object",
-         "title": "Response Allowed V1 Actions Allowed Get"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/actions/restart-service": {
-   "post": {
-    "summary": "Restart Service",
-    "operationId": "restart_service_v1_actions_restart_service_post",
-    "requestBody": {
-     "content": {
-      "application/json": {
-       "schema": {
-        "$ref": "#/components/schemas/RestartBody"
-       }
-      }
-     },
-     "required": true
     },
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "additionalProperties": true,
-         "type": "object",
-         "title": "Response Restart Service V1 Actions Restart Service Post"
+    "/v1/services": {
+      "get": {
+        "summary": "Services",
+        "operationId": "services_v1_services_get",
+        "parameters": [
+          {
+            "name": "filter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "custom",
+                "failed",
+                "active"
+              ],
+              "type": "string",
+              "default": "all",
+              "title": "Filter"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 60
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response Services V1 Services Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
         }
-       }
       }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/actions/power": {
-   "post": {
-    "summary": "Power",
-    "operationId": "power_v1_actions_power_post",
-    "requestBody": {
-     "content": {
-      "application/json": {
-       "schema": {
-        "$ref": "#/components/schemas/PowerBody"
-       }
-      }
-     },
-     "required": true
     },
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "additionalProperties": true,
-         "type": "object",
-         "title": "Response Power V1 Actions Power Post"
+    "/v1/services/{name}/logs": {
+      "get": {
+        "summary": "Service Logs",
+        "operationId": "service_logs_v1_services__name__logs_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "title": "Name"
+            }
+          },
+          {
+            "name": "lines",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Lines"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response Service Logs V1 Services  Name  Logs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
         }
-       }
       }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/shell": {
-   "get": {
-    "summary": "Shell State",
-    "operationId": "shell_state_v1_shell_get",
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "additionalProperties": true,
-         "type": "object",
-         "title": "Response Shell State V1 Shell Get"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/shell/start": {
-   "post": {
-    "summary": "Shell Start",
-    "operationId": "shell_start_v1_shell_start_post",
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "additionalProperties": true,
-         "type": "object",
-         "title": "Response Shell Start V1 Shell Start Post"
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/v1/shell/stop": {
-   "post": {
-    "summary": "Shell Stop",
-    "operationId": "shell_stop_v1_shell_stop_post",
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "additionalProperties": true,
-         "type": "object",
-         "title": "Response Shell Stop V1 Shell Stop Post"
-        }
-       }
-      }
-     }
-    }
-   }
-  }
- },
- "components": {
-  "schemas": {
-   "GpioBody": {
-    "properties": {
-     "action": {
-      "type": "string",
-      "enum": [
-       "on",
-       "off",
-       "pulse",
-       "read",
-       "release"
-      ],
-      "title": "Action"
-     },
-     "duration_ms": {
-      "type": "integer",
-      "maximum": 10000.0,
-      "minimum": 20.0,
-      "title": "Duration Ms",
-      "default": 500
-     }
     },
-    "additionalProperties": false,
-    "type": "object",
-    "required": [
-     "action"
-    ],
-    "title": "GpioBody"
-   },
-   "HTTPValidationError": {
-    "properties": {
-     "detail": {
-      "items": {
-       "$ref": "#/components/schemas/ValidationError"
+    "/v1/containers": {
+      "get": {
+        "summary": "Containers",
+        "operationId": "containers_v1_containers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Containers V1 Containers Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/containers/{ref}/logs": {
+      "get": {
+        "summary": "Container Logs",
+        "operationId": "container_logs_v1_containers__ref__logs_get",
+        "parameters": [
+          {
+            "name": "ref",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "title": "Ref"
+            }
+          },
+          {
+            "name": "lines",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Lines"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Container Logs V1 Containers  Ref  Logs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/containers/{ref}/restart": {
+      "post": {
+        "summary": "Container Restart",
+        "operationId": "container_restart_v1_containers__ref__restart_post",
+        "parameters": [
+          {
+            "name": "ref",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "title": "Ref"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Container Restart V1 Containers  Ref  Restart Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/events": {
+      "get": {
+        "summary": "Events",
+        "operationId": "events_v1_events_get",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Since"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Events V1 Events Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/updates": {
+      "get": {
+        "summary": "Updates",
+        "operationId": "updates_v1_updates_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Updates V1 Updates Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/updates/check": {
+      "post": {
+        "summary": "Updates Check",
+        "operationId": "updates_check_v1_updates_check_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Updates Check V1 Updates Check Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/updates/install": {
+      "post": {
+        "summary": "Updates Install",
+        "operationId": "updates_install_v1_updates_install_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Updates Install V1 Updates Install Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agent/update": {
+      "get": {
+        "summary": "Agent Update",
+        "operationId": "agent_update_v1_agent_update_get",
+        "parameters": [
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Refresh"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Agent Update V1 Agent Update Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       },
-      "type": "array",
-      "title": "Detail"
-     }
-    },
-    "type": "object",
-    "title": "HTTPValidationError"
-   },
-   "PowerBody": {
-    "properties": {
-     "action": {
-      "type": "string",
-      "enum": [
-       "reboot",
-       "poweroff"
-      ],
-      "title": "Action"
-     },
-     "confirm": {
-      "type": "string",
-      "maxLength": 40,
-      "minLength": 1,
-      "title": "Confirm"
-     }
-    },
-    "additionalProperties": false,
-    "type": "object",
-    "required": [
-     "action",
-     "confirm"
-    ],
-    "title": "PowerBody"
-   },
-   "RestartBody": {
-    "properties": {
-     "name": {
-      "type": "string",
-      "maxLength": 200,
-      "minLength": 1,
-      "title": "Name"
-     }
-    },
-    "additionalProperties": false,
-    "type": "object",
-    "required": [
-     "name"
-    ],
-    "title": "RestartBody"
-   },
-   "ValidationError": {
-    "properties": {
-     "loc": {
-      "items": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "integer"
+      "post": {
+        "summary": "Agent Update Start",
+        "operationId": "agent_update_start_v1_agent_update_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Agent Update Start V1 Agent Update Post"
+                }
+              }
+            }
+          }
         }
-       ]
-      },
-      "type": "array",
-      "title": "Location"
-     },
-     "msg": {
-      "type": "string",
-      "title": "Message"
-     },
-     "type": {
-      "type": "string",
-      "title": "Error Type"
-     },
-     "input": {
-      "title": "Input"
-     },
-     "ctx": {
-      "type": "object",
-      "title": "Context"
-     }
+      }
     },
-    "type": "object",
-    "required": [
-     "loc",
-     "msg",
-     "type"
-    ],
-    "title": "ValidationError"
-   }
+    "/v1/sites": {
+      "get": {
+        "summary": "Sites",
+        "operationId": "sites_v1_sites_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Sites V1 Sites Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/processes": {
+      "get": {
+        "summary": "Processes",
+        "operationId": "processes_v1_processes_get",
+        "parameters": [
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "cpu",
+                "mem",
+                "pid",
+                "name"
+              ],
+              "type": "string",
+              "default": "cpu",
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 300,
+              "minimum": 1,
+              "default": 30,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 60
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response Processes V1 Processes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/backups": {
+      "get": {
+        "summary": "Backups",
+        "operationId": "backups_v1_backups_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response Backups V1 Backups Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ports": {
+      "get": {
+        "summary": "Ports",
+        "operationId": "ports_v1_ports_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Ports V1 Ports Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/gpio": {
+      "get": {
+        "summary": "Gpio",
+        "operationId": "gpio_v1_gpio_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Gpio V1 Gpio Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/gpio/{pin}": {
+      "post": {
+        "summary": "Gpio Action",
+        "operationId": "gpio_action_v1_gpio__pin__post",
+        "parameters": [
+          {
+            "name": "pin",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 27,
+              "minimum": 0,
+              "title": "Pin"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GpioBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Gpio Action V1 Gpio  Pin  Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sensors": {
+      "get": {
+        "summary": "Sensors",
+        "operationId": "sensors_v1_sensors_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Sensors V1 Sensors Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/commands": {
+      "get": {
+        "summary": "Commands",
+        "operationId": "commands_v1_commands_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response Commands V1 Commands Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/commands/{cmd_id}/run": {
+      "post": {
+        "summary": "Run Command",
+        "operationId": "run_command_v1_commands__cmd_id__run_post",
+        "parameters": [
+          {
+            "name": "cmd_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 41,
+              "title": "Cmd Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Run Command V1 Commands  Cmd Id  Run Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/wol": {
+      "get": {
+        "summary": "Wol",
+        "operationId": "wol_v1_wol_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response Wol V1 Wol Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/wol/{dev_id}": {
+      "post": {
+        "summary": "Wol Send",
+        "operationId": "wol_send_v1_wol__dev_id__post",
+        "parameters": [
+          {
+            "name": "dev_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 41,
+              "title": "Dev Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Wol Send V1 Wol  Dev Id  Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audit": {
+      "get": {
+        "summary": "Audit Log",
+        "operationId": "audit_log_v1_audit_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response Audit Log V1 Audit Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/actions/allowed": {
+      "get": {
+        "summary": "Allowed",
+        "operationId": "allowed_v1_actions_allowed_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Allowed V1 Actions Allowed Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/actions/restart-service": {
+      "post": {
+        "summary": "Restart Service",
+        "operationId": "restart_service_v1_actions_restart_service_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestartBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Restart Service V1 Actions Restart Service Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/actions/power": {
+      "post": {
+        "summary": "Power",
+        "operationId": "power_v1_actions_power_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PowerBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Power V1 Actions Power Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/shell": {
+      "get": {
+        "summary": "Shell State",
+        "operationId": "shell_state_v1_shell_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Shell State V1 Shell Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/shell/start": {
+      "post": {
+        "summary": "Shell Start",
+        "operationId": "shell_start_v1_shell_start_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Shell Start V1 Shell Start Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/shell/stop": {
+      "post": {
+        "summary": "Shell Stop",
+        "operationId": "shell_stop_v1_shell_stop_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Shell Stop V1 Shell Stop Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "GpioBody": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "on",
+              "off",
+              "pulse",
+              "read",
+              "release"
+            ],
+            "title": "Action"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 20.0,
+            "title": "Duration Ms",
+            "default": 500
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "GpioBody"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "PowerBody": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "reboot",
+              "poweroff"
+            ],
+            "title": "Action"
+          },
+          "confirm": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Confirm"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "confirm"
+        ],
+        "title": "PowerBody"
+      },
+      "RestartBody": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "RestartBody"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
   }
- }
 }
