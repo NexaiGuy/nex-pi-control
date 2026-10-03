@@ -96,8 +96,8 @@ The installer never changes your firewall, fail2ban, SSH or cloudflared configur
 
 | Folder | What |
 |---|---|
-| [`agent/`](agent) | FastAPI agent and admin shell for the Pi (Python 3.11+), setup, deploy and rollback scripts, 126 tests |
-| [`app/`](app) | Android app (Expo SDK 57, React Native, TypeScript), 115 tests |
+| [`agent/`](agent) | FastAPI agent and admin shell for the Pi (Python 3.11+), setup, deploy and rollback scripts, 134 tests |
+| [`app/`](app) | Android app (Expo SDK 57, React Native, TypeScript), 196 tests |
 | [`docs/`](docs) | Connection guides, the privacy policy and screenshots |
 
 ## Privacy

@@ -16,7 +16,8 @@ export function pct(v: number | null | undefined): string {
   return v === null || v === undefined ? '–' : `${nf1.format(v)}%`;
 }
 
-const UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+// Rekent met 1024, dus de juiste namen zijn KiB, MiB, GiB (zoals df -h en htop). 'GB' zou 7% te weinig tonen.
+const UNITS = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
 
 export function bytes(v: number | null | undefined, digits = 1): string {
   if (v === null || v === undefined || Number.isNaN(v)) return '–';

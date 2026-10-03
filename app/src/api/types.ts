@@ -73,6 +73,8 @@ export interface Partition {
   mountpoint?: string | null;
   used?: number | null;
   total?: number | null;
+  /** Vrij voor gewone gebruikers (zonder root-reserve). Sinds agent 1.2.6. */
+  free?: number | null;
   percent?: number | null;
 }
 
@@ -100,8 +102,11 @@ export interface DiskAlarm {
 export interface Counts {
   services: { active: number; failed: number; total: number };
   containers: { running: number; stopped: number; total: number };
-  sites: { up: number; down: number; total: number };
+  /** warning: antwoordt met een foutcode (4xx). Ontbreekt bij agents ouder dan 1.2.5. */
+  sites: { up: number; down: number; warning?: number; total: number };
   last_backup_age_seconds: number | null;
+  /** Ontbreekt bij agents ouder dan 1.2.5. */
+  backups?: { failed: number; old: number; total: number };
 }
 
 export interface Overview {
@@ -231,6 +236,9 @@ export interface Site {
   checked_at?: number;
   /** Waar de hostname vandaan komt: de tunnel (cloudflared-config), nginx of sites.yml. */
   source?: string | null;
+  /** Gezet als / een foutcode gaf en een healthpad wel antwoordde (agent 1.2.5+). */
+  probe_path?: string;
+  root_status?: number;
 }
 
 export interface SiteDiscovery {

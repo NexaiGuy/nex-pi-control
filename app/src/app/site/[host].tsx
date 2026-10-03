@@ -22,10 +22,10 @@ export default function SiteDetail() {
       {s ? (
         <Card style={{ gap: space.sm }}>
           <Row style={{ justifyContent: 'space-between' }}>
-            <T v="mono">https://{h}</T>
+            <T v="mono">https://{h}{s.probe_path ?? ''}</T>
             {st ? <StatusPill level={st.level} label={st.label} /> : null}
           </Row>
-          <KeyValue k="HTTP" v={s.status_code ? String(s.status_code) : s.error ?? '–'} />
+          <KeyValue k="HTTP" v={s.status_code ? `${s.status_code}${s.probe_path && s.root_status ? ` · / ${s.root_status}` : ''}` : s.error ?? '–'} />
           <KeyValue k={t.system.latency} v={s.latency_ms !== null && s.latency_ms !== undefined ? `${s.latency_ms} ms` : '–'} />
           <KeyValue k={t.system.tls} v={s.tls_expires_at ? `${dateTime(s.tls_expires_at)} (${s.tls_days_left} d)` : '–'} />
           <KeyValue k={t.system.local} v={s.local ?? '–'} />

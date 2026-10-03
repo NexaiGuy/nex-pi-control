@@ -71,6 +71,11 @@ def compute_health(
         down = [s["hostname"] for s in sites if s.get("state") == "down"]
         if down:
             add("warning", "sites_down", L(f"{len(down)} site(s) onbereikbaar: ", f"{len(down)} site(s) unreachable: ") + ", ".join(down[:3]))
+        # Antwoordt wel, maar met een foutcode (404, 410, 429...). Telt niet als online, dus ook melden.
+        erring = [s for s in sites if s.get("state") == "warning"]
+        if erring:
+            names = ", ".join(f"{s['hostname']} ({s.get('status_code')})" for s in erring[:3]) + ("…" if len(erring) > 3 else "")
+            add("warning", "sites_error", L(f"{len(erring)} site(s) geven een foutcode: ", f"{len(erring)} site(s) return an error code: ") + names)
         for s in sites:
             if s.get("tls_days_left") is not None and s["tls_days_left"] < 14:
                 add("warning", "tls", L(f"TLS van {s['hostname']} vervalt over {s['tls_days_left']} dagen", f"TLS for {s['hostname']} expires in {s['tls_days_left']} days"), s["hostname"])
@@ -107,14 +112,18 @@ def counts(services, containers, sites, backups) -> dict[str, Any]:
     for b in jobs:
         if b.get("state") == "ok" and (newest is None or b["age_seconds"] < newest):
             newest = b["age_seconds"]
+    failed = sum(1 for b in jobs if b.get("source") == "timer" and b.get("state") == "failed")
+    old = sum(1 for b in jobs if b.get("state") == "ok" and b.get("age_seconds", 0) > b.get("max_age_seconds", BACKUP_MAX_AGE))
     return {
         "services": {"active": sum(1 for x in s if x.get("active") == "active"),
                      "failed": sum(1 for x in s if x.get("active") == "failed"), "total": len(s)},
         "containers": {"running": sum(1 for x in c if x.get("state") == "running"),
                        "stopped": sum(1 for x in c if x.get("state") != "running"), "total": len(c)},
         "sites": {"up": sum(1 for x in st if x.get("state") in ("up", "protected")),
-                  "down": sum(1 for x in st if x.get("state") == "down"), "total": len(st)},
+                  "down": sum(1 for x in st if x.get("state") == "down"),
+                  "warning": sum(1 for x in st if x.get("state") == "warning"), "total": len(st)},
         "last_backup_age_seconds": newest,
+        "backups": {"failed": failed, "old": old, "total": len(jobs)},
     }
 
 

@@ -15,7 +15,7 @@ from hal_common.web import run
 
 from .services import parse_show
 
-PROPS = "Id,Description,Result,ExecMainStatus,ActiveState"
+PROPS = "Id,Description,Result,ExecMainStatus,ActiveState,ExecMainStartTimestamp"
 
 
 def _matches(name: str, patterns: list[str]) -> bool:
@@ -38,15 +38,28 @@ def parse_timers(text: str, patterns: list[str]) -> list[dict[str, Any]]:
     return out
 
 
+def _unix(value: str | None) -> int:
+    """`--timestamp=unix` geeft '@1791032609'. Leeg of 'n/a' wordt 0."""
+    v = (value or "").strip()
+    if v.startswith("@"):
+        try:
+            return int(float(v[1:]))
+        except ValueError:
+            return 0
+    return 0
+
+
 def build(timers: list[dict[str, Any]], show: dict[str, dict[str, str]], max_age: int, now: float | None = None) -> list[dict[str, Any]]:
     now = time.time() if now is None else now
     out = []
     for t in timers:
         s = show.get(t["service"], {})
-        last = int(t["last_us"] or 0) // 1_000_000
+        trigger = int(t["last_us"] or 0) // 1_000_000
         nxt = int(t["next_us"] or 0) // 1_000_000
         # Een wekelijkse timer mag ouder zijn dan 36 u: de grens is minstens anderhalve periode.
-        period = nxt - last if last and nxt > last else 0
+        period = nxt - trigger if trigger and nxt > trigger else 0
+        # De echte laatste run: ook een handmatige start telt, niet enkel de laatste keer dat de timer afging.
+        last = max(trigger, _unix(s.get("ExecMainStartTimestamp")))
         allowed = max(max_age, int(period * 1.5))
         result = s.get("Result", "")
         failed = s.get("ActiveState") == "failed" or (result not in ("", "success"))
@@ -73,7 +86,9 @@ async def timer_backups(patterns: list[str], max_age: int) -> list[dict[str, Any
     services = sorted({t["service"] for t in timers if t["service"]})
     show: dict[str, dict[str, str]] = {}
     if services:
-        s = await run(["systemctl", "show", "--no-pager", f"--property={PROPS}", "--", *services], timeout=15)
+        s = await run(["systemctl", "show", "--no-pager", "--timestamp=unix", f"--property={PROPS}", "--", *services], timeout=15)
+        if s.code != 0:  # systemd ouder dan 247 kent --timestamp niet: dan enkel de timer-trigger
+            s = await run(["systemctl", "show", "--no-pager", f"--property={PROPS}", "--", *services], timeout=15)
         for b in parse_show(s.stdout):
             show[b.get("Id", "")] = b
     return build(timers, show, max_age)

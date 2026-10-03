@@ -48,7 +48,7 @@ function transportLabel(d: PhysicalDisk): string | null {
   return tr ? (t.disk.transport[tr] ?? tr.toUpperCase()) : null;
 }
 
-function UsageLine({ mountpoint, device, fstype, used, total, percent }: { mountpoint: string; device: string; fstype: string; used: number; total: number; percent: number }) {
+function UsageLine({ mountpoint, device, fstype, used, total, free, percent }: { mountpoint: string; device: string; fstype: string; used: number; total: number; free?: number | null; percent: number }) {
   const l = levelFromPercent(percent, 80, 90);
   return (
     <View style={{ gap: 6 }}>
@@ -62,7 +62,7 @@ function UsageLine({ mountpoint, device, fstype, used, total, percent }: { mount
       </Row>
       <ProgressBar value={percent} level={l} />
       <Row style={{ justifyContent: 'space-between' }}>
-        <T v="monoSmall">{`${bytes(used)} ${t.disk.used} · ${bytes(total - used)} ${t.disk.free}`}</T>
+        <T v="monoSmall">{`${bytes(used)} ${t.disk.used} · ${bytes(free ?? total - used)} ${t.disk.free}`}</T>
         <T v="monoSmall" style={l !== 'ok' ? { color: levelColor[l] } : undefined}>
           {pct(percent)}
         </T>
@@ -122,7 +122,7 @@ function DiskCard({ s, onAckCrc, acking }: { s: PhysicalDisk; onAckCrc: () => vo
               {parts.map((p) => {
                 const mp = p.mountpoint ?? p.mountpoints[0];
                 if (mp && p.total && p.used !== null && p.used !== undefined && p.percent !== null && p.percent !== undefined) {
-                  return <UsageLine key={p.device} mountpoint={mp} device={p.device} fstype={p.fstype} used={p.used} total={p.total} percent={p.percent} />;
+                  return <UsageLine key={p.device} mountpoint={mp} device={p.device} fstype={p.fstype} used={p.used} total={p.total} free={p.free} percent={p.percent} />;
                 }
                 return (
                   <Row key={p.device} style={{ justifyContent: 'space-between' }}>
@@ -186,7 +186,7 @@ export default function DisksScreen() {
           <SectionTitle>{d.data.disks ? t.disk.otherMounts : t.disk.mounts}</SectionTitle>
           <Card style={{ gap: space.lg }}>
             {rest.map((m) => (
-              <UsageLine key={m.mountpoint} mountpoint={m.mountpoint} device={m.device} fstype={m.fstype} used={m.used} total={m.total} percent={m.percent} />
+              <UsageLine key={m.mountpoint} mountpoint={m.mountpoint} device={m.device} fstype={m.fstype} used={m.used} total={m.total} free={m.free} percent={m.percent} />
             ))}
           </Card>
         </>

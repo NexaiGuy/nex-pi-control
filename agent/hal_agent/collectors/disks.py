@@ -81,7 +81,8 @@ def merge(smart: list[dict[str, Any]], inv: list[dict[str, Any]], mounts: list[d
             mp = next((m for m in real if m in usage), None) or (sorted(real, key=len)[0] if real else None)
             u = usage.get(mp) if mp else None
             parts.append({**p, "mountpoints": real, "mountpoint": mp,
-                          "used": u["used"] if u else None, "total": u["total"] if u else None, "percent": u["percent"] if u else None})
+                          "used": u["used"] if u else None, "total": u["total"] if u else None, "free": u["free"] if u else None,
+                          "percent": u["percent"] if u else None})
         row["partitions"] = parts
     rank = {"failing": 0, "warning": 1, "unknown": 2, "ok": 3}
     out.sort(key=lambda r: (rank.get(r.get("status", "unknown"), 2), r.get("device", "")))

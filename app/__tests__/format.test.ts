@@ -3,9 +3,9 @@ import { planCharts } from '@/features/charts/plan';
 
 test('bytes en rate', () => {
   expect(bytes(0)).toBe('0 B');
-  expect(bytes(1536)).toMatch(/^1,5 KB$/);
-  expect(bytes(8 * 1024 ** 3, 0)).toBe('8 GB');
-  expect(rate(2 * 1024 ** 2)).toBe('2 MB/s');
+  expect(bytes(1536)).toMatch(/^1,5 KiB$/);
+  expect(bytes(8 * 1024 ** 3, 0)).toBe('8 GiB');
+  expect(rate(2 * 1024 ** 2)).toBe('2 MiB/s');
   expect(bytes(null)).toBe('–');
 });
 

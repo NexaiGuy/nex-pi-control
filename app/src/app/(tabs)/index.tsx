@@ -78,7 +78,7 @@ function HealthHero({ o }: { o: Overview }) {
               {level === 'ok' ? t.overview.allGood : o.health.title}
             </T>
             <T v="caption">
-              {t.overview.uptime} {duration(o.system.uptime_seconds)} · {o.counts.services.active} {t.overview.services.toLowerCase()}
+              {t.overview.uptime} {duration(o.system.uptime_seconds)} · {o.counts.services.active} {t.overview.services.toLowerCase()} {t.overview.running}
             </T>
           </View>
         </Row>
@@ -118,13 +118,24 @@ function CountTile({ icon, label, main, sub, level, onPress }: { icon: 'server' 
 
 function Counts({ o }: { o: Overview }) {
   const c = o.counts;
-  const backupLevel: Level = c.last_backup_age_seconds === null ? 'unknown' : c.last_backup_age_seconds > 36 * 3600 ? 'warning' : 'ok';
+  // Oudere agents sturen geen warning-telling: wat noch online noch offline is, heeft een foutcode.
+  const siteErr = c.sites.warning ?? Math.max(0, c.sites.total - c.sites.up - c.sites.down);
+  const siteLevel: Level = c.sites.down ? 'critical' : siteErr ? 'warning' : 'ok';
+  const siteSub = c.sites.down ? `${c.sites.down} ${t.overview.down}` : siteErr ? `${siteErr} ${t.overview.siteErrors}` : t.overview.up;
+  const bFailed = c.backups?.failed ?? 0;
+  const bOld = c.backups?.old ?? 0;
+  const age = c.last_backup_age_seconds;
+  const backupLevel: Level = age === null ? 'unknown' : bFailed || bOld || age > 36 * 3600 ? 'warning' : 'ok';
+  const backupSub = age === null ? t.overview.noBackup
+    : bFailed ? `${bFailed} ${t.overview.failed}`
+    : bOld ? `${bOld} ${t.overview.tooOld}`
+    : age > 36 * 3600 ? t.overview.tooOld : t.overview.agoShort;
   return (
     <View style={hs.countsGrid}>
       <CountTile icon="server" label={t.overview.services} main={`${c.services.active}`} sub={c.services.failed ? `${c.services.failed} ${t.overview.failed}` : `${c.services.total} ${t.overview.total}`} level={c.services.failed ? 'warning' : 'ok'} onPress={() => router.push({ pathname: '/system', params: { seg: 'services' } })} />
       <CountTile icon="box" label={t.overview.containers} main={`${c.containers.running}/${c.containers.total}`} sub={c.containers.stopped ? `${c.containers.stopped} ${t.overview.stopped}` : t.overview.running} level={c.containers.stopped ? 'warning' : 'ok'} onPress={() => router.push({ pathname: '/system', params: { seg: 'containers' } })} />
-      <CountTile icon="globe" label={t.overview.sites} main={`${c.sites.up}/${c.sites.total}`} sub={c.sites.down ? `${c.sites.down} ${t.overview.down}` : t.overview.up} level={c.sites.down ? 'critical' : 'ok'} onPress={() => router.push({ pathname: '/system', params: { seg: 'sites' } })} />
-      <CountTile icon="archive" label={t.overview.backup} main={c.last_backup_age_seconds === null ? '–' : duration(c.last_backup_age_seconds, 1)} sub={c.last_backup_age_seconds === null ? t.overview.noBackup : backupLevel === 'warning' ? t.overview.tooOld : t.overview.agoShort} level={backupLevel} onPress={() => router.push('/backups')} />
+      <CountTile icon="globe" label={t.overview.sites} main={`${c.sites.up}/${c.sites.total}`} sub={siteSub} level={siteLevel} onPress={() => router.push({ pathname: '/system', params: { seg: 'sites' } })} />
+      <CountTile icon="archive" label={t.overview.backup} main={age === null ? '–' : duration(age, 1)} sub={backupSub} level={backupLevel} onPress={() => router.push('/backups')} />
     </View>
   );
 }
@@ -138,7 +149,7 @@ function Metrics({ o, sparks }: { o: Overview; sparks: Record<string, number[]> 
       <SectionTitle>{t.overview.live}</SectionTitle>
       <View style={hs.grid}>
         <View style={hs.row}>
-          <Tile icon="cpu" label={t.overview.cpu} value={pct(s.cpu.percent)} sub={`${s.cpu.cores} kernen${s.cpu.freq_mhz ? ` · ${s.cpu.freq_mhz} MHz` : ''}`} level={levelFromPercent(s.cpu.percent, 80, 95)} onPress={() => router.push('/metric/cpu')}>
+          <Tile icon="cpu" label={t.overview.cpu} value={pct(s.cpu.percent)} sub={`${t.common.cores(s.cpu.cores)}${s.cpu.freq_mhz ? ` · ${s.cpu.freq_mhz} MHz` : ''}`} level={levelFromPercent(s.cpu.percent, 80, 95)} onPress={() => router.push('/metric/cpu')}>
             <View style={{ marginTop: 6 }}>
               <CoreBars values={s.cpu.per_core} height={24} />
             </View>
@@ -150,7 +161,7 @@ function Metrics({ o, sparks }: { o: Overview; sparks: Record<string, number[]> 
             icon="thermometer"
             label={t.overview.temp}
             value={s.temperature_c === null ? '–' : `${num(s.temperature_c)} °C`}
-            sub={thr.active ? t.overview.throttleNow : thr.past.length ? t.overview.throttlePast : t.overview.throttleOk}
+            sub={!thr.available ? t.overview.throttleUnknown : thr.active ? t.overview.throttleNow : thr.past.length ? t.overview.throttlePast : t.overview.throttleOk}
             spark={sparks.temp}
             level={thr.active ? 'warning' : tempLevel}
             onPress={() => router.push('/metric/temp')}

@@ -72,6 +72,12 @@ def conditions(smart: list[dict[str, Any]], services: list[dict[str, Any]], cont
             out[f"site:{h}"] = {"level": "critical", "kind": "site",
                                 "title": T(f"{h} is onbereikbaar", f"{h} is down"),
                                 "body": T(f"HTTP {st.get('status_code') or 'geen antwoord'}", f"HTTP {st.get('status_code') or 'no response'}")}
+        elif st.get("state") == "warning":
+            # Antwoordt, maar met een foutcode (404, 410, 429...). Geen "down", wel iets om te bekijken.
+            h = st["hostname"]
+            out[f"site:{h}"] = {"level": "warning", "kind": "site",
+                                "title": T(f"{h} geeft een foutcode", f"{h} returns an error code"),
+                                "body": T(f"HTTP {st.get('status_code')} op {st.get('url') or h}", f"HTTP {st.get('status_code')} at {st.get('url') or h}")}
     if apt and apt.get("security_count"):
         n = int(apt["security_count"])
         out["updates:security"] = {"level": "info", "kind": "updates",

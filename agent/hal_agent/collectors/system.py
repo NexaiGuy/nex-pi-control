@@ -5,6 +5,7 @@ from __future__ import annotations
 import glob
 import os
 import platform
+import re
 import socket
 import time
 from pathlib import Path
@@ -40,6 +41,43 @@ def throttle_label(code: str) -> str:
     }.get(code, code)
 
 SKIP_IFACES = ("lo", "docker", "veth", "br-", "virbr", "tailscale", "wg")
+# Geen echte schijven: zram (swap in RAM, op Pi OS standaard), loop (snaps, images), ram, cd/floppy,
+# en dm-/md-apparaten (LUKS, LVM, RAID) die bovenop een schijf liggen die al meetelt.
+SKIP_DISKS = ("zram", "loop", "ram", "sr", "fd", "dm-", "md")
+# Partities. psutil geeft ze met perdisk=True apart terug naast de schijf zelf (sda en sda1, sda2...):
+# meetellen zou alle schijf-I/O verdubbelen.
+PARTITION = re.compile(r"^(?:(?:sd|hd|vd|xvd)[a-z]+\d+|(?:nvme\d+n\d+|mmcblk\d+|nbd\d+)p\d+)$")
+
+
+def physical_disk_bytes(counters: dict[str, Any] | None) -> tuple[int, int]:
+    """Gelezen en geschreven bytes, enkel van hele fysieke schijven (geen partities, geen zram of loop)."""
+    r = w = 0
+    for name, c in (counters or {}).items():
+        if name.startswith(SKIP_DISKS) or PARTITION.match(name):
+            continue
+        r += c.read_bytes
+        w += c.write_bytes
+    return r, w
+
+
+def vcgencmd_throttled() -> int | None:
+    """Pi 5 heeft vaak geen get_throttled in sysfs. vcgencmd werkt als de agent in de groep video zit."""
+    import shutil
+    import subprocess
+
+    exe = shutil.which("vcgencmd")
+    if not exe:
+        return None
+    try:
+        out = subprocess.run([exe, "get_throttled"], capture_output=True, text=True, timeout=3).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if not out.startswith("throttled="):
+        return None
+    try:
+        return int(out.split("=", 1)[1], 0)
+    except ValueError:
+        return None
 
 
 def _first(globs) -> str | None:
@@ -77,6 +115,8 @@ class SystemSampler:
         self._last_net = None
         self._last_disk = None
         self._last_t = None
+        self._vc_val: int | None = None
+        self._vc_at: float | None = None
         self.snapshot: dict[str, Any] = {}
         psutil.cpu_percent(percpu=True)
         self.sample()
@@ -91,8 +131,7 @@ class SystemSampler:
         rx = sum(v.bytes_recv for k, v in net.items() if not k.startswith(SKIP_IFACES))
         tx = sum(v.bytes_sent for k, v in net.items() if not k.startswith(SKIP_IFACES))
         try:
-            dio = psutil.disk_io_counters()
-            dr, dw = (dio.read_bytes, dio.write_bytes) if dio else (0, 0)
+            dr, dw = physical_disk_bytes(psutil.disk_io_counters(perdisk=True))
         except Exception:
             dr, dw = 0, 0
         rates = {"rx": 0.0, "tx": 0.0, "read": 0.0, "write": 0.0}
@@ -108,7 +147,13 @@ class SystemSampler:
 
         temp_milli = _read_int(self.thermal_path)
         temp = round(temp_milli / 1000, 1) if temp_milli is not None else None
-        throttled = parse_throttled(_read_int(self.throttle_path))
+        raw = _read_int(self.throttle_path)
+        if raw is None:
+            # Geen sysfs-bestand: elke 30 s via vcgencmd (een proces per 2 s is zonde voor iets dat zelden wijzigt).
+            if self._vc_at is None or now - self._vc_at >= 30:
+                self._vc_val, self._vc_at = vcgencmd_throttled(), now
+            raw = self._vc_val
+        throttled = parse_throttled(raw)
         fan = _read_int(self.fan_path)
         load = os.getloadavg()
 

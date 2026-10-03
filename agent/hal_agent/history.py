@@ -120,6 +120,7 @@ class HistoryStore:
                 last = self._db.execute(
                     "SELECT value FROM raw WHERE metric=? ORDER BY ts DESC LIMIT 1", (metric,)
                 ).fetchone()
+                exact = self._db.execute("SELECT AVG(value) FROM raw WHERE metric=? AND ts >= ?", (metric, since)).fetchone()
             else:
                 rows = self._db.execute(
                     f"""SELECT (ts/?)*?, AVG(avg), MIN(min), MAX(max) FROM {table}
@@ -129,13 +130,15 @@ class HistoryStore:
                 last = self._db.execute(
                     "SELECT value FROM raw WHERE metric=? ORDER BY ts DESC LIMIT 1", (metric,)
                 ).fetchone()
+                # Elke rij is een even lange periode (1 of 5 min), dus hun gemiddelde is het echte gemiddelde.
+                exact = self._db.execute(f"SELECT AVG(avg) FROM {table} WHERE metric=? AND ts >= ?", (metric, since)).fetchone()  # noqa: S608
         points = [[int(r[0]), _r(r[1]), _r(r[2]), _r(r[3])] for r in rows]
         return {
             "metric": metric,
             "range": range_key,
             "bucket_seconds": bucket,
             "points": points,
-            "summary": summarize(points, last[0] if last else None),
+            "summary": summarize(points, last[0] if last else None, exact[0] if exact else None),
         }
 
     def export_csv(self, metric: str, range_key: str) -> str:
@@ -152,14 +155,17 @@ def _r(v):
     return None if v is None else round(float(v), 3)
 
 
-def summarize(points: Iterable[list], current) -> dict:
+def summarize(points: Iterable[list], current, exact_avg=None) -> dict:
+    """exact_avg: het gemiddelde over alle metingen. Het gemiddelde van emmergemiddelden telt een halve
+    eerste of laatste emmer even zwaar als een volle, en wijkt daardoor af."""
     pts = list(points)
     if not pts:
         return {"min": None, "avg": None, "max": None, "current": _r(current)}
     avgs = [p[1] for p in pts if p[1] is not None]
+    avg = exact_avg if exact_avg is not None else (sum(avgs) / len(avgs) if avgs else None)
     return {
         "min": _r(min(p[2] for p in pts if p[2] is not None)),
-        "avg": _r(sum(avgs) / len(avgs)) if avgs else None,
+        "avg": _r(avg),
         "max": _r(max(p[3] for p in pts if p[3] is not None)),
         "current": _r(current),
     }

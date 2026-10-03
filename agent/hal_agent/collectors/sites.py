@@ -10,6 +10,9 @@ from typing import Any
 
 import httpx
 
+# Paden die een API vaak heeft als "/" niets teruggeeft (404 bij een kale API-host).
+PROBE_PATHS = ("/health", "/healthz", "/api/health", "/status")
+
 
 def classify(status: int | None) -> str:
     if status is None:
@@ -48,6 +51,24 @@ class SiteChecker:
     def __init__(self) -> None:
         self.results: dict[str, dict[str, Any]] = {}
         self.updated_at: int | None = None
+        # Per host het healthpad dat de vorige keer werkte, zodat we niet elke ronde alles proberen.
+        self._probe_hint: dict[str, str] = {}
+
+    async def _probe(self, client: httpx.AsyncClient, host: str) -> tuple[str, int, int] | None:
+        """Een host die op / een 4xx geeft: is er een healthpad dat wel antwoordt? (pad, status, ms)"""
+        hint = self._probe_hint.get(host)
+        order = ([hint] if hint else []) + [p for p in PROBE_PATHS if p != hint]
+        for path in order:
+            t0 = time.perf_counter()
+            try:
+                r = await client.get(f"https://{host}{path}", follow_redirects=False)
+            except httpx.HTTPError:
+                continue
+            if classify(r.status_code) == "up":
+                self._probe_hint[host] = path
+                return path, r.status_code, round((time.perf_counter() - t0) * 1000)
+        self._probe_hint.pop(host, None)
+        return None
 
     async def check_one(self, client: httpx.AsyncClient, site: dict[str, Any]) -> dict[str, Any]:
         host, path = site["hostname"], site.get("path") or "/"
@@ -62,6 +83,16 @@ class SiteChecker:
             res["latency_ms"] = None
             res["error"] = exc.__class__.__name__
         res["state"] = classify(res.get("status_code"))
+        # Kale API-host: / geeft 404 maar /health antwoordt. Dan is de dienst online, niet "half kapot".
+        # Enkel als er op / gecontroleerd werd: een zelf ingesteld pad (bv. /app) proberen we nooit te omzeilen.
+        # Gevonden sites krijgen altijd path "/" mee uit site_discovery.merge_sites.
+        if res["state"] == "warning" and (site.get("path") or "/") == "/":
+            found = await self._probe(client, host)
+            if found:
+                res["root_status"] = res["status_code"]
+                path_found, code, ms = found
+                res.update({"url": f"https://{host}{path_found}", "status_code": code, "latency_ms": ms,
+                            "state": "up", "probe_path": path_found})
         res["tls_expires_at"] = await tls_expiry(host)
         if res["tls_expires_at"]:
             res["tls_days_left"] = int((res["tls_expires_at"] - time.time()) // 86400)
