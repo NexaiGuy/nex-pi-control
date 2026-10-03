@@ -37,3 +37,10 @@ design/
 # Lokale metingen en losse previews
 metingen/
 Claude outputs/
+
+# Native code van de lokale Expo-modules hoort in git, enkel de build-uitvoer niet
+!app/modules/*/android/
+!app/modules/*/android/**
+app/modules/*/android/build/
+app/modules/*/android/.gradle/
+app/modules/*/android/.cxx/
