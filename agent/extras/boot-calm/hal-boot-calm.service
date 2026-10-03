@@ -1,0 +1,15 @@
+[Unit]
+Description=Nex Pi Control: calm boot (caps system services and containers during startup)
+Documentation=file:///usr/local/share/doc/hal-boot-calm/README.md
+DefaultDependencies=no
+After=local-fs.target
+Before=sysinit.target docker.service containerd.service multi-user.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/hal-boot-calm start
+
+[Install]
+WantedBy=sysinit.target

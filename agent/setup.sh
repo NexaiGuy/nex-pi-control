@@ -114,6 +114,7 @@ install -d -o root -g root -m 0755 "$ETC"
 install -d -o halagent -g halagent -m 0750 "$STATE"
 install -d -o root -g halagent -m 0750 "$STATE/smart"
 install -d -o root -g halagent -m 0750 "$STATE/apt"
+install -d -o root -g halagent -m 0750 "$STATE/sites"
 for pkg in hal_common hal_agent hal_agent/collectors hal_shell; do
   install -d -o root -g root -m 0755 "$APP/$pkg"
   find "$SRC/$pkg" -maxdepth 1 -type f -name '*.py' -exec install -o root -g root -m 0644 {} "$APP/$pkg/" \;
@@ -235,7 +236,7 @@ install -d -m 0755 /etc/polkit-1/rules.d
 c_ok "polkit rule: halagent may only run the fixed actions from allowed-actions.yml and commands.yml"
 
 # 9. systemd -------------------------------------------------------------------------------------------------
-for u in hal-agent.service hal-smart-collect.service hal-smart-collect.timer 'hal-cmd@.service' 'hal-container@.service' \
+for u in hal-agent.service hal-smart-collect.service hal-smart-collect.timer hal-sites-discover.service hal-sites-discover.timer 'hal-cmd@.service' 'hal-container@.service' \
          hal-apt-check.service hal-apt-check.timer hal-apt-upgrade.service hal-agent-update.service; do
   install -o root -g root -m 0644 "$SRC/systemd/$u" "/etc/systemd/system/$u"
 done
@@ -263,6 +264,8 @@ fi
 # 11. Start ------------------------------------------------------------------------------------------------------
 systemctl enable --now hal-smart-collect.timer >/dev/null
 systemctl enable --now hal-apt-check.timer >/dev/null
+systemctl enable --now hal-sites-discover.timer >/dev/null
+systemctl start hal-sites-discover.service || c_warn "Site discovery reported an error: journalctl -u hal-sites-discover"
 systemctl start hal-smart-collect.service || c_warn "First SMART run reported an error: journalctl -u hal-smart-collect"
 systemctl enable hal-agent.service >/dev/null
 systemctl restart hal-agent.service

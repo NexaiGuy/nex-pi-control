@@ -1,0 +1,181 @@
+#!/opt/hal-agent/venv/bin/python
+"""Draait als root via hal-sites-discover.timer. Zoekt publieke hostnames in de cloudflared-configs
+(en optioneel nginx) en schrijft ze naar /var/lib/hal-agent/sites/discovered.json (root:halagent 0640).
+
+Enkel lezen. cloudflared, nginx en hun configs worden nooit aangepast. Credentials (*.json) en tokens
+worden nooit gelezen: van een tunnel met --token of TUNNEL_TOKEN bewaren we enkel de unitnaam.
+"""
+
+import glob
+import grp
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, "/opt/hal-agent")
+from hal_agent.collectors.site_discovery import (  # noqa: E402
+    dedupe, load_yaml, parse_ingress, parse_nginx, parse_remote_log, parse_unit_exec, tunnel_label,
+)
+
+OUT = "/var/lib/hal-agent/sites"
+SITES_YML = "/etc/hal-agent/sites.yml"
+ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C.UTF-8"}
+GLOBS = ("/etc/cloudflared/*.y*ml", "/usr/local/etc/cloudflared/*.y*ml", "/root/.cloudflared/*.y*ml", "/home/*/.cloudflared/*.y*ml")
+NGINX = ("/etc/nginx/sites-enabled/*", "/etc/nginx/conf.d/*.conf")
+
+
+def run(argv, timeout=20):
+    try:
+        r = subprocess.run(argv, capture_output=True, text=True, env=ENV, timeout=timeout)
+        return r.stdout if r.returncode == 0 else ""
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def cloudflared_units():
+    """Elke service-unit die cloudflared start, ook als hij anders heet (zoals een tunnel per project)."""
+    names = set()
+    for line in run(["systemctl", "list-units", "--all", "--type=service", "--plain", "--no-legend"]).splitlines():
+        if line.split():
+            names.add(line.split()[0])
+    for line in run(["systemctl", "list-unit-files", "--type=service", "--no-legend"]).splitlines():
+        if line.split():
+            names.add(line.split()[0])
+    names = sorted(n for n in names if not n.endswith("@.service"))
+    out = []
+    for i in range(0, len(names), 100):  # één systemctl-aanroep per 100 units
+        show = run(["systemctl", "show", "-p", "Id", "-p", "ExecStart", "-p", "Environment", "-p", "LoadState", *names[i:i + 100]], 30)
+        for block in show.split("\n\n"):
+            props = dict(line.split("=", 1) for line in block.splitlines() if "=" in line)
+            exec_start = props.get("ExecStart", "")
+            if props.get("LoadState") != "loaded" or "cloudflared" not in exec_start:
+                continue
+            out.append({"unit": props.get("Id", "cloudflared"), **parse_unit_exec(exec_start, props.get("Environment", ""))})
+    return out
+
+
+def cloudflared_containers():
+    """cloudflared in Docker: configmappen uit de mounts, of een token-tunnel."""
+    if not shutil.which("docker"):
+        return []
+    out = []
+    for cid in run(["docker", "ps", "-q"]).split():
+        raw = run(["docker", "inspect", cid])
+        try:
+            info = json.loads(raw)[0]
+        except (ValueError, IndexError):
+            continue
+        image = str((info.get("Config") or {}).get("Image") or "")
+        if "cloudflared" not in image:
+            continue
+        name = str(info.get("Name") or cid).lstrip("/")
+        args = " ".join(info.get("Args") or [])
+        env = " ".join((info.get("Config") or {}).get("Env") or [])
+        dirs = [m.get("Source") for m in info.get("Mounts") or [] if m.get("Source")]
+        out.append({"unit": f"docker:{name}", "remote": "--token" in args or "TUNNEL_TOKEN=" in env,
+                    "config": None, "dirs": dirs})
+    return out
+
+
+def remote_config(unit):
+    """De laatste ingress van een token-tunnel uit zijn log (docker logs of journalctl). Hooguit 40 s lezen."""
+    if unit.startswith("docker:"):
+        argv = ["docker", "logs", unit[7:]]
+    else:
+        argv = ["journalctl", "-u", unit, "-o", "cat", "--no-pager"]
+    try:
+        p = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace", env=ENV)
+    except OSError:
+        return None
+    deadline = time.monotonic() + 40
+
+    def lines():
+        for line in p.stdout:
+            if time.monotonic() > deadline:
+                break
+            yield line
+
+    try:
+        return parse_remote_log(lines())
+    finally:
+        p.kill()
+        p.wait()
+
+
+def wants_nginx():
+    data = load_yaml(Path(SITES_YML))
+    return isinstance(data, dict) and data.get("discover_nginx") is True
+
+
+def main():
+    os.makedirs(OUT, mode=0o750, exist_ok=True)
+    try:
+        gid = grp.getgrnam("halagent").gr_gid
+    except KeyError:
+        gid = 0
+    os.chown(OUT, 0, gid)
+
+    files: dict[str, str | None] = {}  # pad -> unit
+    for pattern in GLOBS:
+        for p in sorted(glob.glob(pattern)):
+            files.setdefault(os.path.realpath(p), None)
+    units = cloudflared_units() + cloudflared_containers()
+    remote = []
+    for u in units:
+        if u.get("config"):
+            files[os.path.realpath(u["config"])] = u["unit"]
+        for d in u.get("dirs") or []:
+            for p in sorted(glob.glob(os.path.join(d, "*.y*ml"))) if os.path.isdir(d) else ([d] if d.endswith((".yml", ".yaml")) else []):
+                files[os.path.realpath(p)] = u["unit"]
+        if u.get("remote") and not u.get("config"):
+            remote.append(u["unit"].removesuffix(".service"))
+
+    sites, sources = [], []
+    for name in list(remote):
+        unit = name if name.startswith("docker:") else f"{name}.service"
+        data = remote_config(unit)
+        if data and data.get("ingress"):
+            label = name.removeprefix("docker:")
+            found = parse_ingress(data, label)
+            sites += found
+            sources.append({"label": label, "kind": "tunnel", "path": f"log van {name}", "count": len(found)})
+            remote.remove(name)
+    for path, unit in sorted(files.items()):
+        data = load_yaml(Path(path))
+        if not isinstance(data, dict) or "ingress" not in data:
+            continue
+        label = tunnel_label(path, data, unit)
+        found = parse_ingress(data, label)
+        sites += found
+        sources.append({"label": label, "kind": "tunnel", "path": path, "count": len(found)})
+
+    if wants_nginx():
+        for pattern in NGINX:
+            for p in sorted(glob.glob(pattern)):
+                try:
+                    text = Path(p).read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    continue
+                found = parse_nginx(text, f"nginx {Path(p).name}")
+                if found:
+                    sites += found
+                    sources.append({"label": f"nginx {Path(p).name}", "kind": "nginx", "path": p, "count": len(found)})
+
+    record = {"generated_at": int(time.time()), "sites": dedupe(sites), "sources": sources, "remote_tunnels": sorted(set(remote))}
+    path = os.path.join(OUT, "discovered.json")
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(record, f, indent=1)
+    os.chown(tmp, 0, gid)
+    os.chmod(tmp, 0o640)
+    os.replace(tmp, path)
+    print(f"{len(record['sites'])} hostnames uit {len(sources)} bron(nen); token-tunnels: {', '.join(remote) or 'geen'}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,7 +1,7 @@
 // Verbinding (geheimen) en voorkeuren. Alles in SecureStore (Android Keystore), nooit in logs.
 import * as SecureStore from 'expo-secure-store';
 
-import type { ThemePref } from '@/theme/tokens';
+import { DEFAULT_DESIGN, resolveDesign, type DesignName, type ThemePref } from '@/theme/tokens';
 
 import { createStore } from './store';
 
@@ -43,6 +43,13 @@ export interface Prefs {
   snippets: string[];
   /** Thema: volgt het systeem, of altijd donker of licht. */
   theme: ThemePref;
+  /** Design: Odyssey (standaard) of het klassieke ontwerp. */
+  design: DesignName;
+  /**
+   * Het zwevende icoon is één keer automatisch aangezet (of gevraagd). Daarna beslis je zelf in Instellingen.
+   * V2: vroeger zette het kruis het icoon blijvend uit; met een nieuwe sleutel wordt het één keer opnieuw aangezet.
+   */
+  floatingAskedV2: boolean;
 }
 
 export const DEFAULT_CONNECTION: Connection = {
@@ -82,6 +89,8 @@ export const DEFAULT_PREFS: Prefs = {
     'free -h',
   ],
   theme: 'system',
+  design: DEFAULT_DESIGN,
+  floatingAskedV2: false,
 };
 
 const KEY_CONN = 'hal.connection.v1'; // oude opslag (één server), wordt bij de eerste start gemigreerd
@@ -172,6 +181,8 @@ export async function hydrate(): Promise<void> {
         ...parsed,
         thresholds: { ...DEFAULT_PREFS.thresholds, ...(parsed.thresholds ?? {}) },
         notify: { ...DEFAULT_PREFS.notify, ...(parsed.notify ?? {}) },
+        // Bestaande installaties hebben nog geen design: die krijgen het nieuwe standaarddesign.
+        design: resolveDesign(parsed.design),
       });
     }
   } catch {

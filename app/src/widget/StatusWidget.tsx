@@ -14,6 +14,8 @@ export interface WidgetData {
   disk: number | null;
   updatedAt: number | null; // ms
   offline: boolean;
+  /** Design van de app; zonder waarde het standaarddesign (Odyssey). */
+  design?: 'odyssey' | 'classic';
 }
 
 interface Pal {
@@ -78,7 +80,56 @@ function Body({ d, p }: { d: WidgetData; p: Pal }) {
   );
 }
 
-/** Licht en donker: Android kiest volgens het systeemthema. */
+// Odyssey: steriel wit en diepe ruimte, haarlijnen, een rood oog op de as. Een widget kan niet animeren,
+// dus een probleem krijgt een vaste rand in amber of rood in plaats van de lopende gloed.
+const ODY_LIGHT: Pal = { bg: '#FFFFFF', text: '#0B0B12', muted: '#5E5E68', line: '#D9D9D6', ok: '#087A5D', warning: '#9A5B00', critical: '#C8170E', accent: '#FF2A1F' };
+const ODY_DARK: Pal = { bg: '#13131C', text: '#F2F2F0', muted: '#8A8A94', line: '#2B2B33', ok: '#34F5C5', warning: '#FFB020', critical: '#FF2A1F', accent: '#FF2A1F' };
+
+function OdyStat({ label, value, p, level }: { label: string; value: string; p: Pal; level?: 'warning' | 'critical' }) {
+  return (
+    <FlexWidget style={{ flex: 1, flexDirection: 'column', alignItems: 'center' }}>
+      <TextWidget text={label.toUpperCase()} style={{ fontSize: 9, color: p.muted, letterSpacing: 0.18 }} />
+      <TextWidget text={value} style={{ fontSize: 16, color: level ? p[level] : p.text, fontFamily: 'monospace' }} />
+    </FlexWidget>
+  );
+}
+
+function OdyBody({ d, p }: { d: WidgetData; p: Pal }) {
+  const issue = !d.offline && (d.status === 'warning' || d.status === 'critical') ? d.status : undefined;
+  const tempLevel = d.temp !== null && d.temp >= 80 ? 'critical' : d.temp !== null && d.temp >= 70 ? 'warning' : undefined;
+  const diskLevel = d.disk !== null && d.disk >= 90 ? 'critical' : d.disk !== null && d.disk >= 85 ? 'warning' : undefined;
+  return (
+    <FlexWidget
+      clickAction="OPEN_APP"
+      style={{
+        height: 'match_parent', width: 'match_parent', backgroundColor: p.bg, borderRadius: 14, padding: 12, flexDirection: 'column',
+        justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: issue ? p[issue] : p.line,
+      }}
+    >
+      <FlexWidget style={{ flexDirection: 'column', alignItems: 'center' }}>
+        <TextWidget text={d.server.toUpperCase()} style={{ fontSize: 12, color: p.text, letterSpacing: 0.2 }} maxLines={1} truncate="END" />
+        <FlexWidget style={{ width: 8, height: 8, borderRadius: 4, marginTop: 5, backgroundColor: p.accent }} />
+      </FlexWidget>
+      <TextWidget
+        text={d.title}
+        style={{ fontSize: 12, color: issue ? p[issue] : d.offline ? p.muted : p.text, textAlign: 'center' }}
+        maxLines={1}
+        truncate="END"
+      />
+      <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', borderTopWidth: 1, borderTopColor: p.line, paddingTop: 6 }}>
+        <OdyStat label={t.overview.temp} value={fmt(d.temp, '°')} p={p} level={tempLevel} />
+        <OdyStat label={t.overview.cpu} value={fmt(d.cpu, '%')} p={p} />
+        <OdyStat label={t.disk.title} value={fmt(d.disk, '%')} p={p} level={diskLevel} />
+      </FlexWidget>
+      <TextWidget text={d.offline ? t.live.offline : time(d.updatedAt)} style={{ fontSize: 9, color: p.muted, fontFamily: 'monospace' }} />
+    </FlexWidget>
+  );
+}
+
+/** Licht en donker: Android kiest volgens het systeemthema. Het design volgt de keuze in de app. */
 export function StatusWidget({ data }: { data: WidgetData }) {
+  if ((data.design ?? 'odyssey') === 'odyssey') {
+    return { light: <OdyBody d={data} p={ODY_LIGHT} />, dark: <OdyBody d={data} p={ODY_DARK} /> };
+  }
   return { light: <Body d={data} p={LIGHT} />, dark: <Body d={data} p={DARK} /> };
 }

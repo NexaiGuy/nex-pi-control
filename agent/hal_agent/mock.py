@@ -90,7 +90,8 @@ class MockBackend:
         self.shell_active_since: float | None = None
         self._net = (0.0, 0.0)
         self.fixed_containers: set[str] = set()
-        self.events_store = EventStore(settings.state_dir / "events.db")
+        self.events_store = EventStore(settings.state_dir / "events.db", debounce=False)
+        self.last_upgrade: dict[str, Any] | None = None
         self.apt_packages = [] if self.scenario == "ok" else [
             {"name": "openssl", "from": "3.5.1-1", "to": "3.5.1-1+deb13u1", "security": True},
             {"name": "libssl3t64", "from": "3.5.1-1", "to": "3.5.1-1+deb13u1", "security": True},
@@ -184,6 +185,7 @@ class MockBackend:
             ("/dev/nvme0n1p2", "/", "ext4", 476 * GB),
             ("/dev/nvme0n1p1", "/boot/firmware", "vfat", int(0.5 * GB)),
             ("/dev/sda1", "/mnt/data", "ext4", 931 * GB),
+            ("/dev/sdb1", "/mnt/reserve", "exfat", 238 * GB),
         ]
         out = []
         for dev, mp, fs, total in rows:
@@ -216,9 +218,13 @@ class MockBackend:
                 "reasons": [L("184 verplaatste sectoren (reallocated)", "184 reallocated sectors"), L("12 onleesbare sectoren in wachtrij (pending)", "12 pending (unreadable) sectors"),
                             "10 onherstelbare leesfouten (uncorrectable)", "Firmware SVT01B6Q heeft gekende defecten, update aanbevolen"],
             })
+        usb = {"device": "/dev/sdb", "model": "TS256GESD310C", "smart_supported": False, "status": "unknown", "transport": "usb",
+               "reasons": [L("De USB-adapter van deze schijf geeft geen SMART-gegevens door. Gezondheid onbekend.",
+                             "This disk's USB adapter does not pass SMART data through. Health unknown.")],
+               "collected_at": now - 90, "attributes": {}, "capacity_bytes": 256060514304}
         mmc = {"device": "/dev/mmcblk0", "model": L("SD-kaart (SC64G)", "SD card (SC64G)"), "smart_supported": False, "status": "unknown",
                "reasons": [L("SMART niet ondersteund door dit apparaat", "SMART not supported by this device")], "collected_at": now - 90, "attributes": {}}
-        return [nvme, sda, mmc]
+        return [nvme, sda, usb, mmc]
 
     def _services(self) -> list[dict[str, Any]]:
         allowed = set(self.config.restart_units())
@@ -268,7 +274,7 @@ class MockBackend:
             protected = host in ("vault.example.com", "pi-api.example.com")
             lat = self._metric_value(f"site.{host}.latency", now)
             out.append({
-                "hostname": host, "url": f"https://{host}/", "local": local,
+                "hostname": host, "url": f"https://{host}/", "local": local, "source": "home" if i < 5 else ("tunnel-apps" if i < 8 else "sites.yml"),
                 "status_code": 502 if down else (302 if protected else 200), "latency_ms": None if down else lat,
                 "state": "down" if down else ("protected" if protected else "up"),
                 "tls_expires_at": now + (61 - i * 3) * 86400, "tls_days_left": 61 - i * 3,
@@ -281,9 +287,19 @@ class MockBackend:
         now = int(time.time())
         rows = [("home-assistant", 6 * 3600, 184_000_000), ("nextcloud", 6 * 3600 + 120, 2_420_000_000),
                 ("n8n", (50 if self.scenario != "ok" else 6) * 3600, 61_000_000), ("photos", 6 * 3600 + 300, 912_000_000),
-                ("config", 30 * 3600, 3_400_000)]
-        return [{"name": n, "path": f"/var/backups/{n}", "state": "ok", "latest_file": f"{n}-{time.strftime('%Y%m%d', time.gmtime(now - a))}.tar.zst",
-                 "latest_at": now - a, "latest_size": s, "age_seconds": a, "total_size": s * 7, "files": 7} for n, a, s in rows]
+                ("config", 30 * 3600, 3_400_000), ("migratie-20260920-010833", 11 * 86400, 640_000_000)]
+        from .collectors.misc import classify_backups
+
+        items = [{"name": n, "path": f"/var/backups/{n}", "state": "ok", "latest_file": f"{n}-{time.strftime('%Y%m%d', time.gmtime(now - a))}.tar.zst",
+                  "latest_at": now - a, "latest_size": s, "age_seconds": a, "total_size": s * 7, "files": 7} for n, a, s in rows]
+        from .collectors.backup_timers import build
+
+        day = 86400 * 1_000_000
+        timers = [{"timer": f"{n}.timer", "service": f"{n}.service", "last_us": (now - a) * 1_000_000, "next_us": (now - a) * 1_000_000 + day}
+                  for n, a in (("db-backup", 7 * 3600), ("offsite-backup", 6 * 3600))]
+        show = {f"{n}.service": {"Id": f"{n}.service", "Result": "success", "ActiveState": "inactive", "Description": d}
+                for n, d in (("db-backup", "Nightly database dump"), ("offsite-backup", "Encrypted offsite copy"))}
+        return build(timers, show, 36 * 3600, now) + classify_backups(items, self.config.backup_policy())
 
     # API ---------------------------------------------------------------------
 
@@ -309,9 +325,27 @@ class MockBackend:
                 "cpu_cores": 4, "memory_total": 8 * GB,
                 "addresses": [{"interface": "eth0", "address": "192.168.1.50"}], "boot_time": int(self.boot)}
 
+    def _inventory(self) -> list[dict[str, Any]]:
+        def part(dev: str, size: int, fs: str, mps: list[str], label: str = "") -> dict[str, Any]:
+            return {"device": dev, "size_bytes": size, "fstype": fs, "label": label, "mountpoints": mps}
+        return [
+            {"device": "/dev/nvme0n1", "model": "Samsung SSD 980 PRO 500GB", "serial": "S5GXNX0T123456", "transport": "nvme",
+             "size_bytes": 500107862016, "removable": False,
+             "partitions": [part("/dev/nvme0n1p1", 536870912, "vfat", ["/boot/firmware"]), part("/dev/nvme0n1p2", 499570991104, "ext4", ["/"])]},
+            {"device": "/dev/sda", "model": "Samsung SSD 870 EVO 1TB", "serial": "S6PTNM0R654321", "transport": "usb",
+             "size_bytes": 1000204886016, "removable": False, "partitions": [part("/dev/sda1", 1000204886016, "ext4", ["/mnt/data"])]},
+            {"device": "/dev/sdb", "model": "TS256GESD310C", "serial": "", "transport": "usb", "size_bytes": 256060514304, "removable": True,
+             "partitions": [part("/dev/sdb1", 256060514304, "exfat", ["/mnt/reserve"], "RESERVE")]},
+            {"device": "/dev/mmcblk0", "model": "SC64G", "serial": "", "transport": "sd", "size_bytes": 63864569856, "removable": True,
+             "partitions": [part("/dev/mmcblk0p1", 63864569856, "vfat", [])]},
+        ]
+
     async def disks(self) -> dict[str, Any]:
+        from .collectors.disks import merge
+
         smart = self._smart()
-        return {"mounts": self._mounts(), "smart": smart, "disk_alarms": disk_alarms(smart)}
+        m = self._mounts()
+        return {"mounts": m, "smart": smart, "disks": merge(smart, self._inventory(), m), "disk_alarms": disk_alarms(smart)}
 
     async def acknowledge_crc(self) -> None:
         return None
@@ -351,8 +385,8 @@ class MockBackend:
     # Onderhoud ---------------------------------------------------------------
 
     def _apt(self) -> dict[str, Any]:
-        return {"checked_at": self.apt_checked_at, "count": len(self.apt_packages), "security_count": sum(1 for p in self.apt_packages if p["security"]),
-                "packages": self.apt_packages, "reboot_required": False, "error": None}
+        return {"checked_at": self.apt_checked_at, "count": len(self.apt_packages), "held_count": 0, "full_upgrade_removes": [],
+                "security_count": sum(1 for p in self.apt_packages if p["security"]), "packages": self.apt_packages, "reboot_required": False, "error": None, "last_upgrade": self.last_upgrade}
 
     def _conditions(self) -> dict[str, dict[str, Any]]:
         return conditions(self._smart(), self._services(), self._containers(), self._sites(), self._apt())
@@ -386,6 +420,7 @@ class MockBackend:
             self.apt_run["log"] += [f"Setting up {p['name']} ({p['to']}) ..." for p in pkgs] + ["Done"]
             self.apt_run.update(running=False, state="inactive", result="success", exit_status=0, finished_at=int(time.time()))
             self.apt_packages = []
+            self.last_upgrade = {"at": int(time.time()), "rc": 0, "upgraded": len(pkgs), "newly_installed": 0, "not_upgraded": 0, "kept_back": []}
 
         asyncio.get_running_loop().create_task(finish())
         return {"ok": True, "message": L("Updates worden geïnstalleerd", "Installing updates")}
@@ -430,7 +465,10 @@ class MockBackend:
                 for i in range(lines)]
 
     def sites(self) -> dict[str, Any]:
-        return {"sites": self._sites(), "updated_at": int(time.time()) - 20}
+        return {"sites": self._sites(), "updated_at": int(time.time()) - 20,
+                "discovery": {"enabled": True, "generated_at": int(time.time()) - 240, "excluded": 0,
+                              "sources": [{"label": "home", "kind": "tunnel", "count": 5}, {"label": "tunnel-apps", "kind": "tunnel", "count": 3}],
+                              "remote_tunnels": ["cloudflared-remote"] if self.scenario != "ok" else []}}
 
     def processes(self, sort: str, limit: int, q: str | None) -> list[dict[str, Any]]:
         names = ["python3", "postgres", "node", "dockerd", "cloudflared", "nginx", "ollama", "redis-server", "containerd", "uvicorn",
@@ -450,7 +488,7 @@ class MockBackend:
         rows.sort(key=lambda r: r[key], reverse=key not in ("pid", "name"))
         return rows[:limit] if limit else rows
 
-    def backups(self) -> list[dict[str, Any]]:
+    async def backups(self) -> list[dict[str, Any]]:
         return self._backups()
 
     def ports(self) -> dict[str, Any]:

@@ -25,6 +25,48 @@ def parse(text: str) -> list[dict]:
     return pkgs
 
 
+INST_RE = re.compile(r"^Inst (\S+)", re.M)
+REMV_RE = re.compile(r"^Remv (\S+)", re.M)
+
+
+def simulate(args: list[str]) -> str:
+    """apt-get -s: enkel simuleren, er wordt niets geïnstalleerd of verwijderd. Inst/Remv-regels zijn stabiel over apt-versies."""
+    try:
+        r = subprocess.run(["apt-get", "-s", "-q", "-o", "DPkg::Lock::Timeout=60", *args], capture_output=True, text=True, env=ENV, timeout=300)
+        return r.stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def mark_held(pkgs: list[dict]) -> list[str]:
+    """Welke updates `upgrade --with-new-pkgs` (wat de app installeert) niet meeneemt, en waarom.
+
+    - hold: met apt-mark hold vastgezet;
+    - phased: Debian/Raspberry Pi rolt de update gefaseerd uit, apt neemt hem later vanzelf mee;
+    - removal: de nieuwe versie vraagt om een ander pakket te verwijderen (enkel via `sudo apt full-upgrade`).
+    Geeft de pakketten terug die full-upgrade zou verwijderen.
+    """
+    if not pkgs:
+        return []
+    sim = simulate(["--with-new-pkgs", "upgrade"])
+    if not sim:
+        return []
+    will = set(INST_RE.findall(sim))
+    held = [p for p in pkgs if p["name"] not in will]
+    if not held:
+        return []
+    holds = set(subprocess.run(["apt-mark", "showhold"], capture_output=True, text=True, env=ENV, timeout=60).stdout.split())
+    phased = set()
+    m = re.search(r"deferred due to phasing:\n((?:[ \t]+.*\n)+)", sim)
+    if m:
+        phased = {w for line in m.group(1).splitlines() for w in line.split()}
+    removes = sorted(set(REMV_RE.findall(simulate(["full-upgrade"]))))
+    for p in held:
+        p["held"] = True
+        p["reason"] = "hold" if p["name"] in holds else "phased" if p["name"] in phased else "removal" if removes else "other"
+    return removes[:50]
+
+
 def write(data: dict) -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
     tmp = OUT + ".tmp"
@@ -49,8 +91,12 @@ def main() -> int:
         print(f"WARNING {error}")
     r = subprocess.run(["apt", "list", "--upgradable"], capture_output=True, text=True, env=ENV, timeout=120)
     pkgs = parse(r.stdout)
-    write({"checked_at": int(time.time()), "packages": pkgs, "reboot_required": os.path.exists("/var/run/reboot-required"), "error": error})
-    print(f"{len(pkgs)} update(s) available, {sum(1 for p in pkgs if p['security'])} security")
+    removes = mark_held(pkgs)
+    write({"checked_at": int(time.time()), "packages": pkgs, "full_upgrade_removes": removes,
+           "reboot_required": os.path.exists("/var/run/reboot-required"), "error": error})
+    held = [p["name"] for p in pkgs if p.get("held")]
+    print(f"{len(pkgs) - len(held)} update(s) ready, {sum(1 for p in pkgs if p['security'] and not p.get('held'))} security"
+          + (f", held back: {' '.join(held)}" + (f" (full-upgrade would remove: {' '.join(removes)})" if removes else "") if held else ""))
     return 0
 
 

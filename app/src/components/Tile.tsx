@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Sparkline } from '@/features/charts/Charts';
-import { colors, type Level, levelColor, radius, space, themed } from '@/theme/tokens';
+import { colors, isOdyssey, type Level, levelColor, radius, space, themed } from '@/theme/tokens';
 
 import { Card, Icon, T, type IconName } from './primitives';
 
@@ -13,10 +13,10 @@ export function Tile({
 }) {
   const accent = level === 'ok' ? colors.purple : levelColor[level];
   return (
-    <Card onPress={onPress} style={tl.tile} glow={level === 'ok' ? undefined : level} accessibilityLabel={a11y ?? `${label} ${value} ${sub ?? ''}`}>
+    <Card onPress={onPress} style={tl.tile} glow={level === 'ok' ? undefined : level} severity={level} accessibilityLabel={a11y ?? `${label} ${value} ${sub ?? ''}`}>
       <View style={tl.top}>
-        <View style={[tl.icon, { backgroundColor: level === 'ok' ? colors.purpleSoft : `${accent}26` }]}>
-          <Icon name={icon} size={14} color={accent} />
+        <View style={[tl.icon, !isOdyssey() && { backgroundColor: level === 'ok' ? colors.purpleSoft : `${accent}26` }]}>
+          <Icon name={icon} size={isOdyssey() ? 13 : 14} color={isOdyssey() && level === 'ok' ? colors.textMuted : accent} />
         </View>
         <T v="label" numberOfLines={1} style={{ flex: 1 }}>
           {label.toUpperCase()}
@@ -41,7 +41,7 @@ export function Tile({
 }
 
 const tl = themed(() => StyleSheet.create({
-  tile: { flex: 1, minHeight: 148, padding: space.md, gap: 4, borderRadius: radius.lg, overflow: 'hidden' },
+  tile: { flex: 1, minHeight: 148, padding: space.md, gap: 4, borderRadius: radius.lg, overflow: isOdyssey() ? 'visible' : 'hidden' },
   top: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: 4 },
   icon: { width: 24, height: 24, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   spark: { marginTop: 'auto', marginHorizontal: -space.md, marginBottom: -space.md, opacity: 0.95 },

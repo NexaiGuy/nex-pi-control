@@ -1,0 +1,21 @@
+[Unit]
+Description=Nex Pi Control site discovery (reads cloudflared configs, read only)
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/hal-agent/bin/hal-sites-discover
+TimeoutStartSec=120
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=yes
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/var/lib/hal-agent
+PrivateNetwork=yes
+PrivateTmp=yes
+RestrictAddressFamilies=AF_UNIX
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+LockPersonality=yes

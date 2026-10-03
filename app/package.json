@@ -64,7 +64,9 @@
     "build:xterm": "node scripts/build-xterm.js",
     "mock:agent": "cd ../agent && HAL_AGENT_MOCK=1 ../agent/.venv/bin/python -m hal_agent",
     "install:usb": "bash scripts/install-usb.sh",
-    "bootstrap": "bash scripts/kali-bootstrap.sh"
+    "bootstrap": "bash scripts/kali-bootstrap.sh",
+    "test:native": "bash scripts/test-native.sh",
+    "measure:overlay": "bash scripts/measure-overlay.sh"
   },
   "private": true,
   "jest": {

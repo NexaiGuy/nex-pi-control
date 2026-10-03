@@ -51,7 +51,7 @@ class SiteChecker:
 
     async def check_one(self, client: httpx.AsyncClient, site: dict[str, Any]) -> dict[str, Any]:
         host, path = site["hostname"], site.get("path") or "/"
-        res: dict[str, Any] = {"hostname": host, "url": f"https://{host}{path}", "local": site.get("local")}
+        res: dict[str, Any] = {"hostname": host, "url": f"https://{host}{path}", "local": site.get("local"), "source": site.get("source")}
         t0 = time.perf_counter()
         try:
             r = await client.get(f"https://{host}{path}", follow_redirects=False)
@@ -96,7 +96,7 @@ class SiteChecker:
         fresh = {}
         for s, r in zip(sites, done, strict=True):
             if isinstance(r, Exception):
-                fresh[s["hostname"]] = {"hostname": s["hostname"], "state": "down", "error": r.__class__.__name__}
+                fresh[s["hostname"]] = {"hostname": s["hostname"], "state": "down", "error": r.__class__.__name__, "source": s.get("source")}
             else:
                 fresh[s["hostname"]] = r
         self.results = fresh

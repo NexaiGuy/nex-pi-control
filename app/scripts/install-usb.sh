@@ -39,7 +39,7 @@ command -v adb >/dev/null || die "adb ontbreekt. Draai eerst: bash scripts/kali-
 prepare_build() {
   info "Broncode synchroniseren naar $BUILD (map zonder spaties)"
   mkdir -p "$BUILD_ROOT"
-  rsync -a --delete --exclude node_modules --exclude android --exclude .expo --exclude dist "$APP_SRC/" "$BUILD/"
+  rsync -a --delete --exclude node_modules --exclude /android --exclude /ios --exclude .expo --exclude /dist "$APP_SRC/" "$BUILD/"
   cd "$BUILD"
   if [[ ! -d node_modules ]] || [[ package-lock.json -nt node_modules/.package-lock.json ]]; then
     info "npm ci"
@@ -131,5 +131,17 @@ if (( RC != 0 )) || ! grep -q "Success" <<<"$OUT"; then
   die "Installatie mislukt"
 fi
 ok "Nex Pi Control geïnstalleerd"
+# Zwevend icoon: geef meteen "Weergeven over andere apps", dan staat het icoon er bij de eerste start zonder vragen.
+if adb -s "$SERIAL" shell dumpsys package "$PKG" 2>/dev/null | grep -q "android.permission.SYSTEM_ALERT_WINDOW"; then
+  if adb -s "$SERIAL" shell appops set "$PKG" SYSTEM_ALERT_WINDOW allow >/dev/null 2>&1; then
+    ok "Zwevend icoon: 'Weergeven over andere apps' toegestaan"
+  fi
+fi
+# Enkel op het startscherm: "Toegang tot gebruiksgegevens", zodat het icoon zich verbergt als een andere app open is.
+if adb -s "$SERIAL" shell dumpsys package "$PKG" 2>/dev/null | grep -q "android.permission.PACKAGE_USAGE_STATS"; then
+  if adb -s "$SERIAL" shell appops set "$PKG" GET_USAGE_STATS allow >/dev/null 2>&1; then
+    ok "Zwevend icoon: 'Toegang tot gebruiksgegevens' toegestaan (enkel op het startscherm)"
+  fi
+fi
 adb -s "$SERIAL" shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
 ok "App gestart op je gsm. Zet USB-foutopsporing weer uit als je klaar bent."

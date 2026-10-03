@@ -75,9 +75,16 @@ def compute_health(
             if s.get("tls_days_left") is not None and s["tls_days_left"] < 14:
                 add("warning", "tls", L(f"TLS van {s['hostname']} vervalt over {s['tls_days_left']} dagen", f"TLS for {s['hostname']} expires in {s['tls_days_left']} days"), s["hostname"])
     if backups:
-        old = [b["name"] for b in backups if b.get("state") == "ok" and b.get("age_seconds", 0) > BACKUP_MAX_AGE]
+        # Enkel terugkerende back-ups (kind "job"); eenmalige kopieën en genegeerde mappen geven nooit een waarschuwing.
+        old = [b for b in backups if b.get("kind", "job") == "job" and b.get("state") == "ok"
+               and b.get("age_seconds", 0) > b.get("max_age_seconds", BACKUP_MAX_AGE)]
+        failed = [b["name"] for b in backups if b.get("source") == "timer" and b.get("state") == "failed"]
+        if failed:
+            add("warning", "backup_failed", L("Back-up mislukt: ", "Backup failed: ") + ", ".join(failed[:3]) + ("…" if len(failed) > 3 else ""))
         if old:
-            add("warning", "backup_old", L("Backup ouder dan 36 u: ", "Backup older than 36 h: ") + ", ".join(old[:3]))
+            hours = round(old[0].get("max_age_seconds", BACKUP_MAX_AGE) / 3600)
+            names = ", ".join(b["name"] for b in old[:3]) + ("…" if len(old) > 3 else "")
+            add("warning", "backup_old", L(f"Back-up ouder dan {hours} u: ", f"Backup older than {hours} h: ") + names)
 
     order = {"critical": 0, "warning": 1}
     reasons.sort(key=lambda r: (0 if r["code"] == "disk_smart" else 1, order.get(r["level"], 2)))
@@ -96,7 +103,8 @@ def counts(services, containers, sites, backups) -> dict[str, Any]:
     c = containers or []
     st = sites or []
     newest = None
-    for b in backups or []:
+    jobs = [b for b in backups or [] if b.get("kind", "job") == "job"]
+    for b in jobs:
         if b.get("state") == "ok" and (newest is None or b["age_seconds"] < newest):
             newest = b["age_seconds"]
     return {

@@ -31,7 +31,7 @@ polkit.addRule(function(action, subject) {
         if (verb === "start" && startUnits.indexOf(unit) >= 0) {
             return polkit.Result.YES;
         }
-        if (verb === "start" && %(containers)s && /^hal-container@[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\.service$/.test(unit)) {
+        if (verb === "start" && %(containers)s && /^hal-container@[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\\.service$/.test(unit)) {
             return polkit.Result.YES;
         }
         if (verb === "stop" && unit === "hal-shell.service") {

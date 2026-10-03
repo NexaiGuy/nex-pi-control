@@ -14,17 +14,28 @@ import { ApiError, api } from '@/api/client';
 import type { AgentEvent, AgentUpdateState, EventsResponse, Overview } from '@/api/types';
 import { t } from '@/i18n';
 import { diffAlerts, evaluateAlerts, type Alert } from '@/lib/alerts';
+import { floatingPi } from '@/lib/floatingPi';
 import {
   hydrate, hydratedStore, isConfigured, prefsStore, serverName, serversStore, type Connection, type NotifyPrefs, type Server,
 } from '@/state/settings';
 
 export const TASK = 'nex-pi-control-alerts';
-const CHANNEL = 'hal-alerts';
+// Geen pop-ups bovenaan het scherm: meldingen komen stil in de meldingenbalk. Kritieke meldingen (zoals een falende
+// schijf) maken wel geluid, ook zonder pop-up. Nieuwe kanalen, omdat Android de prioriteit van een bestaand kanaal
+// niet laat verlagen; het oude kanaal (hoge prioriteit, met pop-up) wordt verwijderd.
+const CHANNEL = 'hal-alerts-quiet';
+const CHANNEL_CRITICAL = 'hal-alerts-critical';
+const OLD_CHANNELS = ['hal-alerts'];
 const FOREGROUND_MIN_MS = 30_000;
+/** Hetzelfde probleem binnen deze tijd opnieuw: geen nieuwe melding (een site die blijft flapperen). */
+export const RENOTIFY_MS = 6 * 3600_000;
+/** Meer nieuwe problemen tegelijk dan dit: één samenvattende melding in plaats van een stapel. */
+export const SUMMARY_FROM = 4;
 const AGENT_CHECK_MS = 24 * 3600_000;
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
+  // Ook als de app open is: geen banner bovenaan, enkel in de meldingenbalk.
+  handleNotification: async () => ({ shouldShowBanner: false, shouldShowList: true, shouldPlaySound: false, shouldSetBadge: false }),
 });
 
 export interface ServerAlertState {
@@ -35,6 +46,8 @@ export interface ServerAlertState {
   /** Laatste keer dat we naar een agent-update vroegen, en voor welke versie we al een melding gaven. */
   agentCheckedAt?: number;
   agentNotified?: string | null;
+  /** Wanneer we voor een probleem (sleutel van de Pi of drempel) het laatst een melding gaven. */
+  notifiedAt?: Record<string, number>;
 }
 
 type StateFile = Record<string, ServerAlertState>;
@@ -102,8 +115,38 @@ export function eventEnabled(e: Pick<AgentEvent, 'kind'>, prefs: NotifyPrefs): b
 export function newEvents(events: AgentEvent[], lastId: number, prefs: NotifyPrefs): AgentEvent[] {
   return events
     .filter((e) => e.id > lastId && !e.resolved && e.level !== 'ok' && eventEnabled(e, prefs))
-    .sort((a, b) => a.id - b.id)
-    .slice(-5);
+    .sort((a, b) => a.id - b.id);
+}
+
+/** Sleutels die sinds lastId opgelost zijn en nu niet opnieuw open staan. Hun melding mag uit de balk. */
+export function resolvedKeys(events: AgentEvent[], lastId: number): string[] {
+  const latest = new Map<string, AgentEvent>();
+  for (const e of events) {
+    if (e.id <= lastId) continue;
+    const prev = latest.get(e.key);
+    if (!prev || e.id > prev.id) latest.set(e.key, e);
+  }
+  return [...latest.values()].filter((e) => e.resolved).map((e) => e.key);
+}
+
+/**
+ * Welke nieuwe problemen krijgen echt een melding? Niet hetzelfde probleem opnieuw binnen RENOTIFY_MS, en per sleutel
+ * maar één keer per controle. Geeft ook de bijgewerkte tijdstippen terug.
+ */
+export function throttle(events: AgentEvent[], notifiedAt: Record<string, number>, now: number): { show: AgentEvent[]; notifiedAt: Record<string, number> } {
+  const next: Record<string, number> = {};
+  for (const [k, ts] of Object.entries(notifiedAt)) if (now - ts < RENOTIFY_MS) next[k] = ts; // oude sleutels opruimen
+  const show: AgentEvent[] = [];
+  for (const e of events) {
+    if (next[e.key] !== undefined) continue;
+    next[e.key] = now;
+    show.push(e);
+  }
+  return { show, notifiedAt: next };
+}
+
+async function dismiss(id: string): Promise<void> {
+  await Notifications.dismissNotificationAsync(id).catch(() => undefined);
 }
 
 function eventUrl(e: AgentEvent): string {
@@ -124,15 +167,21 @@ function eventUrl(e: AgentEvent): string {
   }
 }
 
-async function notify(title: string, body: string, data: Record<string, string>, critical: boolean): Promise<void> {
+/** Eén melding per probleem per server: een nieuwe melding voor hetzelfde probleem vervangt de oude in de balk. */
+export function notificationId(serverId: string, key: string): string {
+  return `${serverId}|${key}`;
+}
+
+async function notify(id: string, title: string, body: string, data: Record<string, string>, critical: boolean): Promise<void> {
   await Notifications.scheduleNotificationAsync({
+    identifier: id,
     content: {
       title,
       body,
       data,
-      priority: critical ? Notifications.AndroidNotificationPriority.MAX : Notifications.AndroidNotificationPriority.HIGH,
+      priority: critical ? Notifications.AndroidNotificationPriority.DEFAULT : Notifications.AndroidNotificationPriority.LOW,
     },
-    trigger: { channelId: CHANNEL },
+    trigger: { channelId: critical ? CHANNEL_CRITICAL : CHANNEL },
   });
 }
 
@@ -146,6 +195,8 @@ async function checkServer(server: Server, prev: ServerAlertState, overview: Ove
   const conn = asConn(server);
   const name = serverName(conn);
   const o = overview ?? (await api.get<Overview>('/v1/overview', undefined, { timeoutMs: 20000, conn }));
+  // Het ruitje op het zwevende icoon volgt de actieve Pi.
+  if (server.id === serversStore.get().activeId) floatingPi.setStatus(o.health.status);
   const next: ServerAlertState = { ...prev };
 
   // 1. Gebeurtenissen van de Pi zelf.
@@ -157,8 +208,18 @@ async function checkServer(server: Server, prev: ServerAlertState, overview: Ove
       // Eerste keer: enkel een basislijn, geen stortvloed aan oude meldingen.
       next.lastEventId = res.last_id;
     } else {
-      for (const e of newEvents(res.events, prev.lastEventId, prefs.notify)) {
-        await notify(t.notify.eventTitle(name, e.title), e.body, { serverId: server.id, url: eventUrl(e) }, e.level === 'critical');
+      // Opgelost: de melding verdwijnt uit de balk. In de app blijft alles in de lijst Meldingen staan.
+      for (const key of resolvedKeys(res.events, prev.lastEventId)) await dismiss(notificationId(server.id, key));
+      const { show, notifiedAt } = throttle(newEvents(res.events, prev.lastEventId, prefs.notify), prev.notifiedAt ?? {}, Date.now());
+      next.notifiedAt = notifiedAt;
+      if (show.length >= SUMMARY_FROM) {
+        const critical = show.some((e) => e.level === 'critical');
+        await notify(notificationId(server.id, 'summary'), t.notify.summaryTitle(name, show.length), show.map((e) => e.title).join(' · '),
+          { serverId: server.id, url: '/events' }, critical);
+      } else {
+        for (const e of show) {
+          await notify(notificationId(server.id, e.key), t.notify.eventTitle(name, e.title), e.body, { serverId: server.id, url: eventUrl(e) }, e.level === 'critical');
+        }
       }
       next.lastEventId = Math.max(prev.lastEventId, res.last_id);
     }
@@ -169,9 +230,10 @@ async function checkServer(server: Server, prev: ServerAlertState, overview: Ove
   // 2. Drempels die je zelf instelt. Met gebeurtenissen van de agent dekken die al schijf, diensten en sites.
   const all = evaluateAlerts(o, prefs.thresholds);
   const current = hasEvents ? all.filter((a) => a.kind === 'temp' || a.kind === 'diskUsage' || a.kind === 'backup') : all;
-  const { fired } = diffAlerts(prev.keys ?? [], current, prefs.notify);
+  const { fired, resolved } = diffAlerts(prev.keys ?? [], current, prefs.notify);
+  for (const key of resolved) await dismiss(notificationId(server.id, `local:${key}`));
   for (const a of fired) {
-    await notify(titleFor(a, name), a.text, { serverId: server.id, url: a.kind === 'disk' ? '/disks' : '/' }, a.level === 'critical');
+    await notify(notificationId(server.id, `local:${a.key}`), titleFor(a, name), a.text, { serverId: server.id, url: a.kind === 'disk' ? '/disks' : '/' }, a.level === 'critical');
   }
   next.keys = current.map((a) => a.key);
 
@@ -181,7 +243,7 @@ async function checkServer(server: Server, prev: ServerAlertState, overview: Ove
     try {
       const u = await api.get<AgentUpdateState>('/v1/agent/update', undefined, { timeoutMs: 20000, conn });
       if (u.update_available && u.latest && u.latest !== prev.agentNotified) {
-        await notify(t.notify.agentUpdateTitle(name), t.notify.agentUpdateBody(u.latest), { serverId: server.id, url: '/updates' }, false);
+        await notify(notificationId(server.id, 'agent-update'), t.notify.agentUpdateTitle(name), t.notify.agentUpdateBody(u.latest), { serverId: server.id, url: '/updates' }, false);
         next.agentNotified = u.latest;
       }
     } catch {
@@ -215,6 +277,7 @@ export async function checkNow(overview?: Overview): Promise<void> {
       changed = true;
     } catch {
       // Eén onbereikbare Pi mag de andere niet tegenhouden.
+      if (s.id === activeId) floatingPi.setStatus('offline');
     }
   }
   // Opruimen: state van verwijderde servers.
@@ -238,10 +301,17 @@ TaskManager.defineTask(TASK, async () => {
 
 export async function registerBackgroundAlerts(): Promise<void> {
   try {
+    for (const id of OLD_CHANNELS) await Notifications.deleteNotificationChannelAsync(id).catch(() => undefined);
+    // LOW: stil, enkel in de meldingenbalk. DEFAULT: geluid en trilling, maar geen pop-up (die komt pas bij HIGH).
     await Notifications.setNotificationChannelAsync(CHANNEL, {
       name: t.notify.channel,
-      importance: Notifications.AndroidImportance.HIGH,
+      importance: Notifications.AndroidImportance.LOW,
       lightColor: '#8B5CF6',
+    });
+    await Notifications.setNotificationChannelAsync(CHANNEL_CRITICAL, {
+      name: t.notify.channelCritical,
+      importance: Notifications.AndroidImportance.DEFAULT,
+      lightColor: '#FF2A1F',
       vibrationPattern: [0, 200, 120, 200],
     });
     const perm = await Notifications.getPermissionsAsync();

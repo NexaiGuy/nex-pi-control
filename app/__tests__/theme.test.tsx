@@ -1,4 +1,5 @@
-// Thema's: wisselen werkt ter plaatse, stylesheets volgen, contrast blijft AA, en schermen renderen in het lichte thema.
+// Thema's en designs: wisselen werkt ter plaatse, stylesheets volgen, contrast blijft AA, en schermen renderen.
+// Het klassieke design wordt hier expliciet gekozen; Odyssey (het standaarddesign) heeft eigen tests verderop.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react-native';
 import type { ComponentType } from 'react';
@@ -6,8 +7,11 @@ import { StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import fixtures from './fixtures/mock-api.json';
-import { connectionStore, DEFAULT_CONNECTION } from '@/state/settings';
-import { applyTheme, colors, getTheme, levelColor, resolveTheme, series, themed, type } from '@/theme/tokens';
+import { connectionStore, DEFAULT_CONNECTION, DEFAULT_PREFS, hydrate, prefsStore } from '@/state/settings';
+import {
+  applyTheme, colors, DEFAULT_DESIGN, fonts, getDesign, getTheme, levelColor, radius, resolveDesign, resolveTheme, series, themed, type,
+} from '@/theme/tokens';
+import { StatusWidget, type WidgetData } from '@/widget/StatusWidget';
 
 const FX = fixtures as Record<string, unknown>;
 
@@ -56,7 +60,7 @@ function contrast(a: string, b: string): number {
 }
 
 afterAll(() => {
-  applyTheme('dark');
+  applyTheme('dark', DEFAULT_DESIGN);
 });
 
 describe('thema-keuze', () => {
@@ -69,7 +73,7 @@ describe('thema-keuze', () => {
   });
 
   test('applyTheme werkt kleuren, tekststijlen, niveaus en grafiekkleuren ter plaatse bij', () => {
-    applyTheme('dark');
+    applyTheme('dark', 'classic');
     const st = themed(() => StyleSheet.create({ root: { backgroundColor: colors.bg } }));
     expect(st.root.backgroundColor).toBe('#0B0B12');
 
@@ -88,7 +92,7 @@ describe('thema-keuze', () => {
   });
 
   test('licht thema haalt WCAG AA voor tekst en statuskleuren', () => {
-    applyTheme('light');
+    applyTheme('light', 'classic');
     for (const k of ['text', 'textMuted', 'purple', 'mint', 'amber', 'red', 'cyan', 'magenta'] as const) {
       expect(contrast(colors[k], colors.bg)).toBeGreaterThanOrEqual(4.5);
       expect(contrast(colors[k], colors.surface)).toBeGreaterThanOrEqual(4.5);
@@ -100,9 +104,9 @@ describe('thema-keuze', () => {
   });
 });
 
-describe('schermen in het lichte thema', () => {
+describe('schermen in het lichte thema (klassiek)', () => {
   beforeAll(() => {
-    applyTheme('light');
+    applyTheme('light', 'classic');
   });
 
   test('Overzicht rendert met lichte achtergrond', async () => {
@@ -121,5 +125,113 @@ describe('schermen in het lichte thema', () => {
   test('Statistieken rendert', async () => {
     await renderScreen(require('@/app/(tabs)/stats').default);
     expect(await screen.findAllByText(/CPU/)).not.toHaveLength(0);
+  });
+});
+
+// ---------- Odyssey ---------------------------------------------------------------------------------
+
+describe('Odyssey is het standaarddesign', () => {
+  test('standaard en terugval', () => {
+    expect(DEFAULT_DESIGN).toBe('odyssey');
+    expect(DEFAULT_PREFS.design).toBe('odyssey');
+    expect(resolveDesign(undefined)).toBe('odyssey');
+    expect(resolveDesign('iets-anders')).toBe('odyssey');
+    expect(resolveDesign('classic')).toBe('classic');
+  });
+
+  test('bestaande voorkeuren zonder design krijgen Odyssey, een gekozen design blijft staan', async () => {
+    const SecureStore = require('expo-secure-store');
+    await SecureStore.setItemAsync('hal.prefs.v1', JSON.stringify({ onboarded: true, theme: 'light' }));
+    await hydrate();
+    expect(prefsStore.get().design).toBe('odyssey');
+    expect(prefsStore.get().theme).toBe('light');
+
+    await SecureStore.setItemAsync('hal.prefs.v1', JSON.stringify({ onboarded: true, design: 'classic' }));
+    await hydrate();
+    expect(prefsStore.get().design).toBe('classic');
+
+    await SecureStore.setItemAsync('hal.prefs.v1', JSON.stringify({ onboarded: true, design: 42 }));
+    await hydrate();
+    expect(prefsStore.get().design).toBe('odyssey');
+    await SecureStore.deleteItemAsync('hal.prefs.v1');
+    prefsStore.set(DEFAULT_PREFS);
+  });
+
+  test('wisselen tussen designs werkt kleuren, letters, hoeken en stylesheets bij, zonder resten', () => {
+    applyTheme('dark', 'classic');
+    const st = themed(() => StyleSheet.create({ root: { backgroundColor: colors.bg, borderRadius: radius.lg } }));
+    expect(st.root.backgroundColor).toBe('#0B0B12');
+
+    expect(applyTheme('dark', 'odyssey')).toBe(true);
+    expect(getDesign()).toBe('odyssey');
+    expect(colors.bg).toBe('#050508');
+    expect(st.root.backgroundColor).toBe('#050508');
+    expect(st.root.borderRadius).toBe(6);
+    expect(fonts.body).toBe('SpaceGrotesk_300Light');
+    expect(type.h1.textTransform).toBe('uppercase');
+    expect(type.metric.fontFamily).toBe('JetBrainsMono_200ExtraLight');
+
+    // Terug naar klassiek: geen hoofdletters of tabelcijfers van Odyssey die blijven hangen.
+    applyTheme('dark', 'classic');
+    expect(type.h1.textTransform).toBeUndefined();
+    expect(type.mono.fontVariant).toBeUndefined();
+    expect(fonts.heading).toBe('SpaceGrotesk_700Bold');
+    expect(radius.lg).toBe(16);
+    applyTheme('dark', 'odyssey');
+  });
+
+  test('klein, strak en nooit vet', () => {
+    applyTheme('dark', 'odyssey');
+    for (const [k, v] of Object.entries(type)) {
+      expect(v.fontFamily).not.toMatch(/Bold|SemiBold|Medium|Regular/);
+      if (!['display', 'metric', 'metricSmall'].includes(k)) expect(v.fontSize).toBeLessThanOrEqual(15);
+      expect(v.fontSize).toBeGreaterThanOrEqual(9.5);
+    }
+    for (const f of Object.values(fonts)) expect(f).toMatch(/Light|ExtraLight/);
+  });
+
+  test.each(['dark', 'light'] as const)('Odyssey %s haalt WCAG AA voor tekst en statuskleuren', (name) => {
+    applyTheme(name, 'odyssey');
+    for (const k of ['text', 'textMuted', 'purple', 'mint', 'amber', 'red'] as const) {
+      expect(contrast(colors[k], colors.bg)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(colors[k], colors.surface)).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(contrast(colors.onInk, colors.text)).toBeGreaterThanOrEqual(4.5); // primaire knop: inkt met on-ink
+    expect(contrast(colors.bannerTitle, colors.redBanner)).toBeGreaterThanOrEqual(4.5);
+    applyTheme('dark', 'odyssey');
+  });
+});
+
+describe('schermen in Odyssey', () => {
+  beforeAll(() => {
+    applyTheme('light', 'odyssey');
+  });
+  afterAll(() => {
+    applyTheme('dark', 'odyssey');
+  });
+
+  test('Overzicht rendert met het oog en de kritieke status', async () => {
+    await renderScreen(require('@/app/(tabs)/index').default);
+    expect(await screen.findByText('Kritiek')).toBeTruthy();
+    expect(screen.getByLabelText(/^Agent /)).toBeTruthy();
+    expect(colors.bg).toBe('#F4F4F1');
+  });
+
+  test('Instellingen toont de designkeuze met Odyssey als standaard', async () => {
+    await renderScreen(require('@/app/settings').default);
+    expect(await screen.findByLabelText('Design Odyssey')).toBeTruthy();
+    expect(screen.getByLabelText('Design Klassiek')).toBeTruthy();
+    expect(screen.getByText('Standaard')).toBeTruthy();
+  });
+});
+
+describe('widget volgt het design', () => {
+  const data: WidgetData = { server: 'hal-9000', status: 'critical', title: 'Schijf faalt', temp: 51, cpu: 12, disk: 40, updatedAt: Date.now(), offline: false };
+  const name = (el: unknown) => ((el as { type: { name: string } }).type.name);
+
+  test('standaard Odyssey, klassiek op verzoek', () => {
+    expect(name(StatusWidget({ data }).dark)).toBe('OdyBody');
+    expect(name(StatusWidget({ data: { ...data, design: 'odyssey' } }).light)).toBe('OdyBody');
+    expect(name(StatusWidget({ data: { ...data, design: 'classic' } }).dark)).toBe('Body');
   });
 });

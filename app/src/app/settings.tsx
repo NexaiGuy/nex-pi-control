@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import * as ScreenCapture from 'expo-screen-capture';
 import { useEffect, useState } from 'react';
-import { Pressable, Switch, View } from 'react-native';
+import { AppState, Pressable, Switch, View } from 'react-native';
 
 import { cacheClear } from '@/api/cache';
 import { DetailScreen } from '@/components/layout';
@@ -16,9 +16,10 @@ import { t } from '@/i18n';
 import { ListGroup, ListRow } from '@/components/ListRow';
 import { activateServer } from '@/features/servers/ServerSwitcher';
 import { connectionStore, prefsStore, removeServer, saveConnection, savePrefs, serverName, serversStore, wipeAll, type Connection, type Prefs } from '@/state/settings';
+import { floatingPi } from '@/lib/floatingPi';
 import { setThemeReturn } from '@/lib/themeReturn';
 import { useStore } from '@/state/store';
-import { colors, radius, space, type ThemePref } from '@/theme/tokens';
+import { colors, isOdyssey, radius, space, type DesignName, type ThemePref } from '@/theme/tokens';
 
 function Stepper({ label, value, step, min, max, onChange }: { label: string; value: number; step: number; min: number; max: number; onChange: (v: number) => void }) {
   return (
@@ -44,12 +45,147 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
   );
 }
 
+/**
+ * Zwevend icoon aan/uit. Zonder toestemming opent Android eerst "Weergeven over andere apps"; bij terugkeer in de app
+ * start het icoon vanzelf. Niet zichtbaar in builds zonder de functie (Play Store-variant) of op iOS.
+ */
+function FloatingIconSetting() {
+  const [supported] = useState(() => floatingPi.supported());
+  const [on, setOn] = useState(() => floatingPi.enabled());
+  const [homeOnly, setHomeOnly] = useState(() => floatingPi.homeOnly());
+  const [usage, setUsage] = useState(() => floatingPi.hasUsageAccess());
+  const [waiting, setWaiting] = useState(false);
+  const [status, setStatus] = useState(() => floatingPi.status());
+  useEffect(() => {
+    if (!supported) return undefined;
+    // Statusregel elke 2 s vernieuwen zolang Instellingen open staat.
+    const id = setInterval(() => setStatus(floatingPi.status()), 2000);
+    return () => clearInterval(id);
+  }, [supported]);
+  useEffect(() => {
+    if (!supported) return undefined;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      // Terug uit een Android-instellingenscherm: toestemmingen opnieuw bekijken.
+      setUsage(floatingPi.hasUsageAccess());
+      floatingPi.recheck();
+      if (waiting) {
+        setWaiting(false);
+        if (floatingPi.canDraw() && floatingPi.start()) setOn(true);
+        else toast.error(t.floating.denied);
+      } else {
+        setOn(floatingPi.enabled());
+      }
+    });
+    return () => sub.remove();
+  }, [supported, waiting]);
+  if (!supported) return null;
+  const toggle = (v: boolean) => {
+    if (!v) {
+      floatingPi.stop();
+      setOn(false);
+      setWaiting(false);
+      return;
+    }
+    if (floatingPi.canDraw()) {
+      setOn(floatingPi.start());
+      return;
+    }
+    toast.success(t.floating.permission);
+    setWaiting(true);
+    floatingPi.openPermission();
+  };
+  const toggleHome = (v: boolean) => {
+    floatingPi.setHomeOnly(v);
+    setHomeOnly(v);
+  };
+  return (
+    <>
+      <SectionTitle>{t.floating.title}</SectionTitle>
+      <Card style={{ gap: space.sm }}>
+        <Toggle label={t.floating.toggle} value={on || waiting} onChange={toggle} />
+        {on ? <Toggle label={t.floating.homeOnly} value={homeOnly} onChange={toggleHome} /> : null}
+        {on && !usage ? (
+          <>
+            <T v="caption">{t.floating.usageNeeded}</T>
+            <Button label={t.floating.usageButton} kind="secondary" icon="eye" onPress={() => floatingPi.openUsageAccess()} />
+          </>
+        ) : null}
+        <T v="caption">{t.floating.note}</T>
+        {status ? (
+          <T v="monoSmall" style={{ color: colors.textMuted }}>
+            {t.floating.status(status.running, status.canDraw, status.usageAccess, status.foreground ?? null, status.onHome ?? null, status.bank ?? false)}
+          </T>
+        ) : null}
+      </Card>
+    </>
+  );
+}
+
 // Mini-voorbeeld van elk thema. Vaste kleuren: het voorbeeld toont het thema, niet het actieve thema.
 const SWATCH: Record<ThemePref, { bg: string; bars: string[]; line: string }> = {
   system: { bg: '#F6F5FB', bars: ['#6D28D9', '#34F5C5'], line: '#0B0B12' },
   dark: { bg: '#0B0B12', bars: ['#8B5CF6', '#34F5C5'], line: '#2A2A3D' },
   light: { bg: '#F6F5FB', bars: ['#BE185D', '#047857'], line: '#E2DFEE' },
 };
+
+// Mini-voorbeeld van elk design. Vaste kleuren: het voorbeeld toont het design, niet het actieve design.
+const DESIGN_SWATCH: Record<DesignName, { bg: string; card: string; edge: string; accent: string; bar: string; thin: boolean }> = {
+  odyssey: { bg: '#050508', card: '#0E0E16', edge: 'rgba(242,242,240,0.22)', accent: '#FF2A1F', bar: '#8A8A94', thin: true },
+  classic: { bg: '#0B0B12', card: '#14141F', edge: '#2A2A3D', accent: '#8B5CF6', bar: '#34F5C5', thin: false },
+};
+
+function DesignPicker({ value, onChange }: { value: DesignName; onChange: (v: DesignName) => void }) {
+  const opts: { k: DesignName; label: string; sub?: string }[] = [
+    { k: 'odyssey', label: t.settings.designOdyssey, sub: t.settings.designDefault },
+    { k: 'classic', label: t.settings.designClassic },
+  ];
+  return (
+    <View style={{ flexDirection: 'row', gap: space.sm }} accessibilityRole="radiogroup">
+      {opts.map(({ k, label, sub }) => {
+        const on = value === k;
+        const sw = DESIGN_SWATCH[k];
+        return (
+          <Pressable
+            key={k}
+            onPress={() => onChange(k)}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: on }}
+            accessibilityLabel={t.settings.designA11y(label)}
+            style={{
+              flex: 1, padding: space.sm, gap: 6, alignItems: 'center', borderRadius: radius.md, backgroundColor: colors.surface,
+              borderWidth: on ? (isOdyssey() ? 1 : 2) : 1, borderColor: on ? (isOdyssey() ? colors.text : colors.cyan) : colors.line, minHeight: 48,
+            }}
+          >
+            <View style={{ alignSelf: 'stretch', height: 58, borderRadius: sw.thin ? 3 : 8, backgroundColor: sw.bg, overflow: 'hidden', padding: 6, gap: 5, borderWidth: 1, borderColor: colors.line, alignItems: sw.thin ? 'center' : 'stretch' }}>
+              {sw.thin ? (
+                <>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: sw.accent, opacity: 0.9 }} />
+                  <View style={{ alignSelf: 'stretch', height: 18, borderRadius: 2, borderWidth: 1, borderColor: sw.edge, backgroundColor: sw.card }} />
+                  <View style={{ alignSelf: 'stretch', height: 1, backgroundColor: sw.bar }} />
+                </>
+              ) : (
+                <>
+                  <View style={{ height: 6, borderRadius: 3, backgroundColor: sw.accent }} />
+                  <View style={{ height: 6, width: '60%', borderRadius: 3, backgroundColor: sw.bar }} />
+                  <View style={{ height: 14, borderRadius: 4, borderWidth: 1, borderColor: sw.edge, backgroundColor: sw.card }} />
+                </>
+              )}
+            </View>
+            <T v="caption" style={{ color: on ? colors.text : colors.textMuted }}>
+              {label}
+            </T>
+            {sub ? (
+              <T v="monoSmall" style={{ marginTop: -4 }}>
+                {sub}
+              </T>
+            ) : null}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
 
 function ThemePicker({ value, onChange }: { value: ThemePref; onChange: (v: ThemePref) => void }) {
   const opts: { k: ThemePref; label: string }[] = [
@@ -71,7 +207,7 @@ function ThemePicker({ value, onChange }: { value: ThemePref; onChange: (v: Them
             accessibilityLabel={t.settings.themeA11y(label)}
             style={{
               flex: 1, padding: space.sm, gap: 6, alignItems: 'center', borderRadius: radius.md, backgroundColor: colors.surface,
-              borderWidth: on ? 2 : 1, borderColor: on ? colors.cyan : colors.line, minHeight: 48,
+              borderWidth: on && !isOdyssey() ? 2 : 1, borderColor: on ? (isOdyssey() ? colors.text : colors.cyan) : colors.line, minHeight: 48,
             }}
           >
             <View style={{ alignSelf: 'stretch', height: 52, borderRadius: radius.sm, backgroundColor: sw.bg, overflow: 'hidden', padding: 6, gap: 5, borderWidth: 1, borderColor: colors.line }}>
@@ -113,6 +249,17 @@ export default function SettingsScreen() {
     <DetailScreen title={t.settings.title}>
       <SectionTitle>{t.settings.appearance}</SectionTitle>
       <Card style={{ gap: space.sm }}>
+        <T v="label">{t.settings.design}</T>
+        <DesignPicker
+          value={prefs.design}
+          onChange={(v) => {
+            if (v === prefs.design) return;
+            setThemeReturn('/settings');
+            upd({ design: v });
+          }}
+        />
+        <T v="caption">{t.settings.designNote}</T>
+        <View style={{ height: space.sm }} />
         <ThemePicker
           value={prefs.theme}
           onChange={(v) => {
@@ -123,6 +270,8 @@ export default function SettingsScreen() {
         />
         <T v="caption">{t.settings.themeNote}</T>
       </Card>
+
+      <FloatingIconSetting />
 
       <SectionTitle>{t.settings.connection}</SectionTitle>
       <Card style={{ gap: space.md }}>

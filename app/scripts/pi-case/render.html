@@ -1,0 +1,60 @@
+<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:transparent}</style>
+<script src="three.min.js"></script></head><body><div id="m"></div>
+<script>
+// Zelfde model als "Raspberry Pi Case.dc.html" (rode basis, ventilatiesleuven, witte deksel), zonder bodem-schaduw.
+function rr(w,h,r){const s=new THREE.Shape(),x=-w/2,y=-h/2;s.moveTo(x+r,y);s.lineTo(x+w-r,y);s.quadraticCurveTo(x+w,y,x+w,y+r);s.lineTo(x+w,y+h-r);s.quadraticCurveTo(x+w,y+h,x+w-r,y+h);s.lineTo(x+r,y+h);s.quadraticCurveTo(x,y+h,x,y+h-r);s.lineTo(x,y+r);s.quadraticCurveTo(x,y,x+r,y);return s;}
+function settle(g){g.computeBoundingBox();g.translate(0,-g.boundingBox.min.y,0);}
+function buildCase(){
+  const group=new THREE.Group();
+  const red=new THREE.MeshStandardMaterial({color:0xb01030,roughness:0.48,metalness:0});
+  const white=new THREE.MeshStandardMaterial({color:0xf3f3f4,roughness:0.62,metalness:0});
+  const baseW=9.6,baseD=6.9,corner=0.9;
+  const bg=new THREE.ExtrudeGeometry(rr(baseW,baseD,corner),{depth:1.5,bevelEnabled:true,bevelThickness:0.16,bevelSize:0.16,bevelSegments:3,steps:1,curveSegments:32});
+  bg.rotateX(-Math.PI/2);settle(bg);bg.computeVertexNormals();
+  const base=new THREE.Mesh(bg,red);base.castShadow=base.receiveShadow=true;group.add(base);
+  const baseTop=bg.boundingBox.max.y;
+  const vent=new THREE.MeshStandardMaterial({color:0x161616,roughness:0.85,metalness:0.1});
+  const sl=new THREE.BoxGeometry(0.12,1.2,0.3);
+  for(const side of [1,-1])for(let i=0;i<23;i++){const v=new THREE.Mesh(sl,vent);v.position.set(-3.8+(i/22)*7.6,0.7,side*(baseD/2+0.07));group.add(v);}
+  const ss=new THREE.BoxGeometry(0.3,1.2,0.12);
+  for(const side of [1,-1])for(let i=0;i<14;i++){const v=new THREE.Mesh(ss,vent);v.position.set(side*(baseW/2+0.07),0.7,-2.45+(i/13)*4.9);group.add(v);}
+  const lg=new THREE.ExtrudeGeometry(rr(9.92,7.2,corner+0.15),{depth:0.35,bevelEnabled:true,bevelThickness:0.5,bevelSize:0.46,bevelSegments:6,steps:1,curveSegments:32});
+  lg.rotateX(-Math.PI/2);settle(lg);lg.computeVertexNormals();
+  const lid=new THREE.Mesh(lg,white);lid.position.y=baseTop-0.42;lid.castShadow=lid.receiveShadow=true;group.add(lid);
+  group.traverse(o=>{if(o.isMesh&&o.material.color&&!o.material.userData.lin){o.material.color.convertSRGBToLinear();o.material.userData.lin=1;}});
+  return group;
+}
+const SIZE=+new URLSearchParams(location.search).get('s')||192;
+const scene=new THREE.Scene();
+const cam=new THREE.PerspectiveCamera(30,1,0.1,1000);
+const dir=new THREE.Vector3(10,13,16).normalize();
+const target=new THREE.Vector3(0,1.25,0);
+cam.position.copy(target).addScaledVector(dir,27.5);cam.lookAt(target);
+const r=new THREE.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});
+r.setPixelRatio(1);r.setSize(SIZE,SIZE);r.setClearColor(0x000000,0);
+r.shadowMap.enabled=true;r.shadowMap.type=THREE.PCFSoftShadowMap;
+r.outputEncoding=THREE.sRGBEncoding;r.toneMapping=THREE.ACESFilmicToneMapping;r.toneMappingExposure=0.92;
+document.getElementById('m').appendChild(r.domElement);
+scene.add(new THREE.HemisphereLight(0xffffff,0xcfcfd4,0.85));
+const key=new THREE.DirectionalLight(0xffffff,1.0);key.position.set(7,12,8);key.castShadow=true;key.shadow.mapSize.set(1024,1024);
+Object.assign(key.shadow.camera,{near:1,far:60,left:-14,right:14,top:14,bottom:-14});key.shadow.bias=-0.0005;scene.add(key);
+const fill=new THREE.DirectionalLight(0xffffff,0.32);fill.position.set(-9,5,4);scene.add(fill);
+const rim=new THREE.DirectionalLight(0xffffff,0.28);rim.position.set(-3,6,-10);scene.add(rim);
+const pi=buildCase();scene.add(pi);
+// Logo-inleg op het deksel (data-URL, zodat het canvas niet "tainted" wordt).
+window.setLogo=(url)=>new Promise((res)=>{
+  pi.updateMatrixWorld(true);
+  const lid=pi.children.find(c=>c.isMesh&&c.position.y>0);
+  const hit=new THREE.Raycaster(new THREE.Vector3(0,20,0),new THREE.Vector3(0,-1,0)).intersectObject(lid,false);
+  const y=hit.length?hit[0].point.y:3;
+  new THREE.TextureLoader().load(url,(t)=>{
+    t.encoding=THREE.sRGBEncoding;t.anisotropy=r.capabilities.getMaxAnisotropy();
+    const m=new THREE.MeshBasicMaterial({map:t,transparent:true,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4});
+    const logo=new THREE.Mesh(new THREE.PlaneGeometry(5.0,5.0),m);
+    logo.rotation.x=-Math.PI/2;logo.rotation.z=Math.PI/2;logo.position.set(0,y+0.01,0);pi.add(logo);res(y);
+  });
+});
+window.setView=(elev,dist)=>{const e=elev*Math.PI/180;const d=new THREE.Vector3(10,0,16).normalize().multiplyScalar(Math.cos(e));d.y=Math.sin(e);cam.position.copy(target).addScaledVector(d,dist);cam.lookAt(target);};
+window.frame=(a)=>{pi.rotation.y=a;r.render(scene,cam);return r.domElement.toDataURL('image/png');};
+window.ready=true;
+</script></body></html>

@@ -233,7 +233,7 @@ def create_app(settings: Settings | None = None, backend=None, authenticator: Au
 
     @app.get("/v1/backups", dependencies=read)
     async def backups() -> list[dict[str, Any]]:
-        return backend.backups()
+        return await backend.backups()
 
     @app.get("/v1/ports", dependencies=read)
     async def ports() -> dict[str, Any]:

@@ -38,7 +38,7 @@ def load_script(name: str):
 def test_event_store_new_and_resolved(tmp_path):
     from hal_agent.maintenance import EventStore, T
 
-    store = EventStore(tmp_path / "e.db")
+    store = EventStore(tmp_path / "e.db", debounce=False)
     cond = {"service:x.service": {"level": "warning", "kind": "service", "title": T("Dienst x gestopt", "Service x failed"), "body": T("b", "b")}}
     assert store.sync(cond, now=1000) == 1
     assert store.sync(cond, now=1030) == 0  # zelfde probleem: geen dubbele melding
@@ -51,6 +51,56 @@ def test_event_store_new_and_resolved(tmp_path):
     assert ev["resolved"] is True and ev["level"] == "ok" and ev["title"].startswith("Opgelost")
     # Komt het terug, dan is het opnieuw een melding.
     assert store.sync(cond, now=1090) == 1
+    store.close()
+
+
+def test_event_store_debounces_flapping(tmp_path):
+    """Een site die af en toe één controle mist geeft geen reeks meldingen; een echt probleem wel, één keer."""
+    from hal_agent.maintenance import EventStore, T
+
+    store = EventStore(tmp_path / "e.db")
+    site = {"site:x.example.com": {"level": "critical", "kind": "site", "title": T("x down", "x down"), "body": T("b", "b")}}
+    disk = {"disk:/dev/sda": {"level": "critical", "kind": "disk", "title": T("sda", "sda"), "body": T("b", "b")}}
+    t = 1000
+    # Flapperen: telkens 1 tot 3 mislukte controles, dan weer goed. Nooit een gebeurtenis.
+    for pattern in ([1, 0], [1, 1, 0], [1, 1, 1, 0, 0]):
+        for bad in pattern:
+            t += 30
+            assert store.sync(site if bad else {}, now=t) == 0
+    assert store.list(0, 50)["events"] == []
+    # Schijfproblemen wachten niet.
+    t += 30
+    assert store.sync(disk, now=t) == 1
+    # Vier mislukte controles na elkaar: één gebeurtenis.
+    added = 0
+    for _ in range(4):
+        t += 30
+        added += store.sync({**site, **disk}, now=t)
+    assert added == 1 and store.list(0, 50)["open"] == 2
+    # Eén goede controle tussendoor lost niets op en geeft bij een nieuwe fout geen tweede melding.
+    for cond in ({**disk}, {**site, **disk}, {**disk}, {**site, **disk}):
+        t += 30
+        assert store.sync(cond, now=t) == 0
+    # Pas na zes goede controles na elkaar is de site opgelost.
+    resolved = 0
+    for _ in range(6):
+        t += 30
+        resolved += store.sync(disk, now=t)
+    assert resolved == 1 and store.list(0, 50)["open"] == 1
+    store.close()
+
+
+def test_event_store_keeps_problems_open_without_data(tmp_path):
+    """Na een herstart van de agent zijn de sites nog niet gecontroleerd: dat mag geen "opgelost" plus nieuwe melding geven."""
+    from hal_agent.maintenance import EventStore, T
+
+    store = EventStore(tmp_path / "e.db", debounce=False)
+    site = {"site:x.example.com": {"level": "critical", "kind": "site", "title": T("x", "x"), "body": T("b", "b")}}
+    assert store.sync(site, now=1000) == 1
+    for i in range(10):
+        assert store.sync({}, now=1030 + i * 30, unknown_kinds={"site"}) == 0
+    assert store.list(0, 50)["open"] == 1
+    assert store.sync(site, now=1400) == 0
     store.close()
 
 
@@ -225,3 +275,48 @@ def test_polkit_rule_contains_new_units(tmp_path):
     rule = Path(mod.RULES).read_text()
     assert "hal-apt-upgrade.service" not in rule and "hal-agent-update.service" not in rule
     assert '"start" && false && /^hal-container@' in rule
+
+
+def test_last_upgrade_summary_only_keeps_what_is_still_open(tmp_path):
+    import json as _json
+
+    from hal_agent.maintenance import read_apt_status
+
+    st = tmp_path / "status.json"
+    st.write_text(_json.dumps({"checked_at": 1, "packages": [{"name": "foo-bar", "from": "1", "to": "2", "security": False}]}))
+    (tmp_path / "last-upgrade.json").write_text(_json.dumps({"at": 5, "rc": 0, "upgraded": 11, "newly_installed": 2, "not_upgraded": 2,
+                                                             "kept_back": ["foo-bar", "already-done"]}))
+    s = read_apt_status(st)
+    assert s["last_upgrade"]["upgraded"] == 11 and s["last_upgrade"]["newly_installed"] == 2
+    assert s["last_upgrade"]["kept_back"] == ["foo-bar"]
+    (tmp_path / "last-upgrade.json").unlink()
+    assert read_apt_status(st)["last_upgrade"] is None
+
+
+def test_upgrade_script_installs_new_dependencies_but_never_removes():
+    from pathlib import Path
+
+    script = (Path(__file__).resolve().parent.parent / "bin" / "hal-apt-upgrade").read_text()
+    assert "--with-new-pkgs upgrade" in script
+    commands = [ln for ln in script.splitlines() if ln.lstrip().startswith("apt-get")]
+    for ln in commands:
+        for bad in ("dist-upgrade", "full-upgrade", "autoremove", " remove", " purge"):
+            assert bad not in ln, ln
+
+
+def test_apt_status_held_packages_do_not_count_as_ready(tmp_path):
+    import json
+
+    from hal_agent.maintenance import read_apt_status
+
+    p = tmp_path / "status.json"
+    p.write_text(json.dumps({"checked_at": 1, "full_upgrade_removes": ["oud-pakket"], "packages": [
+        {"name": "rpd-common", "from": "1.31", "to": "1.32", "security": True, "held": True, "reason": "removal"},
+        {"name": "tzdata", "from": "a", "to": "b", "security": False},
+        {"name": "x", "from": "a", "to": "b", "security": False, "held": True, "reason": "evil; rm"},
+    ]}))
+    st = read_apt_status(p)
+    assert st["count"] == 1 and st["held_count"] == 2 and st["security_count"] == 0
+    assert st["full_upgrade_removes"] == ["oud-pakket"]
+    assert [x["name"] for x in st["packages"]] == ["tzdata", "rpd-common", "x"]
+    assert st["packages"][1]["reason"] == "removal" and st["packages"][2]["reason"] is None

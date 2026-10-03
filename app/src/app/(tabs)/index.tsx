@@ -10,12 +10,13 @@ import { ErrorState, Skeleton } from '@/components/overlays';
 import { Card, Icon, ProgressBar, Row, SectionTitle, StatusPill, T } from '@/components/primitives';
 import { Tile } from '@/components/Tile';
 import { CoreBars, HealthRing } from '@/features/charts/Charts';
+import { FloatingIconPrompt } from '@/features/floating/FloatingIconPrompt';
 import { t } from '@/i18n';
 import { levelFromPercent } from '@/lib/alerts';
 import { bytes, duration, num, pct, rate } from '@/lib/format';
 import { connectionStore, serverName } from '@/state/settings';
 import { useStore } from '@/state/store';
-import { colors, type Level, levelColor, space, themed } from '@/theme/tokens';
+import { colors, isOdyssey, type Level, levelColor, space, themed } from '@/theme/tokens';
 
 const SPARK = ['cpu', 'ram', 'temp', 'fan', 'load1', 'net.rx', 'disk.write'];
 
@@ -39,7 +40,7 @@ export default function OverviewScreen() {
 
   const o = q.data;
   return (
-    <Screen title={t.tabs.overview} onRefresh={() => void Promise.all([q.refetch(), hist.refetch()])} refreshing={q.isRefetching} dataUpdatedAt={q.dataUpdatedAt}>
+    <Screen title={t.tabs.overview} onRefresh={() => void Promise.all([q.refetch(), hist.refetch()])} refreshing={q.isRefetching} dataUpdatedAt={q.dataUpdatedAt} eye alerts pi>
       {!o && q.isLoading ? <OverviewSkeleton /> : null}
       {!o && q.error ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}
       {o ? (
@@ -55,6 +56,7 @@ export default function OverviewScreen() {
           </View>
         </View>
       ) : null}
+      <FloatingIconPrompt />
     </Screen>
   );
 }
@@ -65,7 +67,7 @@ function HealthHero({ o }: { o: Overview }) {
   const icon = level === 'ok' ? 'check' : level === 'warning' ? 'alert-triangle' : 'alert-octagon';
   return (
     <Animated.View entering={FadeInDown.duration(350)}>
-      <Card style={[hs.hero, { borderColor: level === 'ok' ? colors.line : color }]} accessibilityLabel={`${o.health.title}`}>
+      <Card style={[hs.hero, !isOdyssey() && { borderColor: level === 'ok' ? colors.line : color }]} severity={level} accessibilityLabel={`${o.health.title}`}>
         <Row gap={space.lg} style={{ alignItems: 'center' }}>
           <HealthRing level={level} size={84} progress={level === 'ok' ? 1 : level === 'warning' ? 0.66 : 0.33}>
             <Icon name={icon} size={28} color={color} />
@@ -87,7 +89,7 @@ function HealthHero({ o }: { o: Overview }) {
                 <View style={{ paddingTop: 3 }}>
                   <Icon name={r.level === 'critical' ? 'alert-octagon' : 'alert-triangle'} size={14} color={levelColor[r.level]} />
                 </View>
-                <T v="body" style={{ flex: 1, fontSize: 14 }}>
+                <T v="body" style={[{ flex: 1 }, !isOdyssey() && { fontSize: 14 }]}>
                   {r.text}
                 </T>
               </Row>
@@ -101,7 +103,7 @@ function HealthHero({ o }: { o: Overview }) {
 
 function CountTile({ icon, label, main, sub, level, onPress }: { icon: 'server' | 'box' | 'globe' | 'archive'; label: string; main: string; sub: string; level: Level; onPress: () => void }) {
   return (
-    <Card onPress={onPress} style={hs.count} accessibilityLabel={`${label}: ${main}, ${sub}`}>
+    <Card onPress={onPress} style={hs.count} severity={level} accessibilityLabel={`${label}: ${main}, ${sub}`}>
       <Row gap={6}>
         <Icon name={icon} size={14} color={level === 'ok' ? colors.textMuted : levelColor[level]} />
         <T v="label">{label.toUpperCase()}</T>
@@ -122,7 +124,7 @@ function Counts({ o }: { o: Overview }) {
       <CountTile icon="server" label={t.overview.services} main={`${c.services.active}`} sub={c.services.failed ? `${c.services.failed} ${t.overview.failed}` : `${c.services.total} ${t.overview.total}`} level={c.services.failed ? 'warning' : 'ok'} onPress={() => router.push({ pathname: '/system', params: { seg: 'services' } })} />
       <CountTile icon="box" label={t.overview.containers} main={`${c.containers.running}/${c.containers.total}`} sub={c.containers.stopped ? `${c.containers.stopped} ${t.overview.stopped}` : t.overview.running} level={c.containers.stopped ? 'warning' : 'ok'} onPress={() => router.push({ pathname: '/system', params: { seg: 'containers' } })} />
       <CountTile icon="globe" label={t.overview.sites} main={`${c.sites.up}/${c.sites.total}`} sub={c.sites.down ? `${c.sites.down} ${t.overview.down}` : t.overview.up} level={c.sites.down ? 'critical' : 'ok'} onPress={() => router.push({ pathname: '/system', params: { seg: 'sites' } })} />
-      <CountTile icon="archive" label={t.overview.backup} main={c.last_backup_age_seconds === null ? '–' : duration(c.last_backup_age_seconds, 1)} sub={backupLevel === 'warning' ? t.overview.tooOld : t.overview.agoShort} level={backupLevel} onPress={() => router.push('/backups')} />
+      <CountTile icon="archive" label={t.overview.backup} main={c.last_backup_age_seconds === null ? '–' : duration(c.last_backup_age_seconds, 1)} sub={c.last_backup_age_seconds === null ? t.overview.noBackup : backupLevel === 'warning' ? t.overview.tooOld : t.overview.agoShort} level={backupLevel} onPress={() => router.push('/backups')} />
     </View>
   );
 }

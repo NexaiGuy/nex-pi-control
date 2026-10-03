@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import re
 import socket
 import time
@@ -78,6 +79,24 @@ class ProcessCollector:
         key = {"cpu": "cpu_percent", "mem": "memory_bytes", "pid": "pid", "name": "name"}.get(sort, "cpu_percent")
         rows.sort(key=lambda r: r[key], reverse=key not in ("pid", "name"))
         return rows[:limit] if limit else rows
+
+
+# Een mapnaam die eindigt op een datum (en eventueel tijd) is een eenmalige kopie, geen terugkerende back-up.
+# Voorbeelden: site.be-20260920-010833, db_2026-09-20, export-20260920T0108
+SNAPSHOT_RE = re.compile(r"[-_.](19|20)\d{2}-?\d{2}-?\d{2}([-_T]?\d{4,6})?$")
+
+
+def classify_backups(items: list[dict[str, Any]], policy: dict[str, Any]) -> list[dict[str, Any]]:
+    """Voegt per back-upmap `kind` toe: "job" (wordt bewaakt) of "archive" (eenmalig of genegeerd, nooit een waarschuwing)."""
+    out = []
+    for b in items:
+        name = str(b.get("name", ""))
+        ignored = any(fnmatch.fnmatch(name, pat) or fnmatch.fnmatch(str(b.get("path", "")), pat) for pat in policy.get("ignore", []))
+        snapshot = bool(SNAPSHOT_RE.search(name))
+        kind = "archive" if ignored or (snapshot and policy.get("snapshots_are_archive", True)) else "job"
+        out.append({**b, "kind": kind, "reason": "ignored" if ignored else ("snapshot" if kind == "archive" else None),
+                    "max_age_seconds": policy.get("max_age_seconds", 36 * 3600)})
+    return out
 
 
 def backups(roots: list[Path], max_depth: int = 2) -> list[dict[str, Any]]:

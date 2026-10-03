@@ -1,9 +1,19 @@
 #!/usr/bin/env bash
 # Draait als root via hal-apt-upgrade.service, enkel na bevestiging in de app.
-# Installeert de beschikbare updates (apt-get upgrade: nooit pakketten verwijderen, geen dist-upgrade)
-# en behoudt je eigen configuratiebestanden (confold). Daarna wordt de lijst opnieuw gecontroleerd.
+# Installeert de beschikbare updates en behoudt je eigen configuratiebestanden (confold).
+#
+# Waarom --with-new-pkgs: een gewone `apt-get upgrade` houdt elk pakket tegen dat een NIEUW pakket nodig heeft.
+# Op een Raspberry Pi is dat bij elke kernelupdate zo (linux-image-rpi-2712 trekt linux-image-6.x.y-rpi-2712 mee),
+# en ook bij rpd-*, labwc, ... Dan "gebeurt er iets" maar blijven alle updates staan. Met --with-new-pkgs worden
+# die nieuwe afhankelijkheden mee geïnstalleerd. Er wordt nog altijd NOOIT iets verwijderd (geen dist-upgrade).
+# Wat dan nog achterblijft, vraagt een verwijdering: dat laat de app bewust aan jou over (sudo apt full-upgrade).
 set -uo pipefail
 export DEBIAN_FRONTEND=noninteractive LANG=C LC_ALL=C PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+STATE=/var/lib/hal-agent/apt
+PY=/opt/hal-agent/venv/bin/python
+OUTLOG="$(mktemp)"
+trap 'rm -f "$OUTLOG"' EXIT
 
 FREE_MB=$(df -Pm / | awk 'NR==2 {print $4}')
 if [[ -n "$FREE_MB" && "$FREE_MB" -lt 500 ]]; then
@@ -11,11 +21,39 @@ if [[ -n "$FREE_MB" && "$FREE_MB" -lt 500 ]]; then
   exit 2
 fi
 echo "Start: apt-get update"
-apt-get update -q || echo "WARNING apt-get update reported errors, continuing with the current lists"
-echo "Start: apt-get upgrade"
-apt-get -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold upgrade
-RC=$?
+apt-get update -q -o DPkg::Lock::Timeout=300 || echo "WARNING apt-get update reported errors, continuing with the current lists"
+echo "Start: apt-get upgrade --with-new-pkgs (installs new dependencies, removes nothing)"
+apt-get -y -q -o DPkg::Lock::Timeout=300 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
+  --with-new-pkgs upgrade 2>&1 | tee "$OUTLOG"
+RC=${PIPESTATUS[0]}
 /opt/hal-agent/bin/hal-apt-check || true
+
+# Samenvatting voor de app: hoeveel geïnstalleerd, wat werd tegengehouden.
+"$PY" - "$OUTLOG" "$RC" "$STATE/last-upgrade.json" <<'PYEOF' || true
+import grp, json, os, re, sys, time
+log, rc, out = open(sys.argv[1], errors="replace").read(), int(sys.argv[2]), sys.argv[3]
+m = re.search(r"(\d+) upgraded, (\d+) newly installed, (\d+) to remove and (\d+) not upgraded", log)
+kept = []
+k = re.search(r"The following packages have been kept back:\n((?:[ \t]+.*\n)+)", log)
+if k:
+    kept = sorted({p for line in k.group(1).splitlines() for p in line.split()})
+data = {"at": int(time.time()), "rc": rc, "upgraded": int(m[1]) if m else None, "newly_installed": int(m[2]) if m else None,
+        "not_upgraded": int(m[4]) if m else None, "kept_back": kept[:200]}
+os.makedirs(os.path.dirname(out), exist_ok=True)
+tmp = out + ".tmp"
+with open(tmp, "w") as f:
+    json.dump(data, f)
+os.chmod(tmp, 0o640)
+try:
+    os.chown(tmp, 0, grp.getgrnam("halagent").gr_gid)
+except (KeyError, OSError):
+    pass
+os.replace(tmp, out)
+print(f"SUMMARY upgraded={data['upgraded']} new={data['newly_installed']} kept_back={len(kept)}")
+if kept:
+    print("Kept back (needs a removal, run 'sudo apt full-upgrade' yourself): " + " ".join(kept))
+PYEOF
+
 if [[ -f /var/run/reboot-required ]]; then echo "A reboot is required to finish the update"; fi
 if [[ $RC -eq 0 ]]; then echo "Done"; else echo "ERROR apt-get upgrade exit code $RC"; fi
 exit $RC

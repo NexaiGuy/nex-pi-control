@@ -59,6 +59,7 @@ export default function EventsScreen() {
               key={e.id}
               mono={false}
               left={<Dot level={levelOf(e)} size={10} />}
+              lines={2}
               title={e.title}
               subtitle={`${ago(e.ts)}${e.body ? ` · ${e.body}` : ''}`}
               onPress={() => router.push(eventHref(e))}

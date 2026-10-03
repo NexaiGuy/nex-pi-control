@@ -1,5 +1,6 @@
 // Updates: systeemupdates (apt) en de agent zelf. Beide lopen als vaste root-unit op de Pi, de app start ze enkel.
 import * as Clipboard from 'expo-clipboard';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
 
@@ -7,14 +8,14 @@ import { ApiError, errorMessage } from '@/api/client';
 import {
   useAgentUpdate, useCheckAgentUpdate, useCheckUpdates, useInfo, useInstallUpdates, useStartAgentUpdate, useUpdates,
 } from '@/api/hooks';
-import type { UnitRun } from '@/api/types';
+import type { AptPackage, UnitRun } from '@/api/types';
 import { DetailScreen } from '@/components/layout';
 import { ConfirmSheet, EmptyState, ErrorState, LogView, SkeletonList, toast, type ConfirmSpec } from '@/components/overlays';
-import { Button, Card, Divider, KeyValue, Row, SectionTitle, StatusPill, T } from '@/components/primitives';
+import { Button, ButtonRow, Card, Divider, KeyValue, Row, SectionTitle, StatusPill, T } from '@/components/primitives';
 import { t } from '@/i18n';
 import { INSTALL_COMMAND, supports } from '@/lib/agent';
 import { ago } from '@/lib/format';
-import { colors, space } from '@/theme/tokens';
+import { colors, isOdyssey, space } from '@/theme/tokens';
 
 function RunLog({ run }: { run: UnitRun }) {
   if (!run.log.length) return null;
@@ -87,6 +88,13 @@ export default function UpdatesScreen() {
 
   const pkgs = apt ? (showAll ? apt.packages : apt.packages.slice(0, 12)) : [];
   const lastOk = apt?.upgrade.result === 'success';
+  const last = apt?.last_upgrade ?? null;
+  const kept = new Set(last?.kept_back ?? []);
+  // Agent 1.2.3+: `held` per pakket uit de controle zelf. Oudere agents: enkel na een installatie (kept_back).
+  const isHeld = (p: AptPackage) => !!p.held || kept.has(p.name);
+  const heldCount = apt ? (apt.held_count ?? apt.packages.filter(isHeld).length) : 0;
+  const removes = apt?.full_upgrade_removes ?? [];
+  const reasons = new Set(apt?.packages.filter(isHeld).map((p) => p.reason ?? 'removal'));
 
   return (
     <DetailScreen
@@ -102,7 +110,11 @@ export default function UpdatesScreen() {
           <Row style={{ justifyContent: 'space-between' }}>
             <View style={{ flex: 1, gap: 2 }}>
               <T v="h3">{aptRunning ? t.updates.installing : apt.count ? t.updates.available(apt.count) : t.updates.upToDate}</T>
-              <T v="caption">{apt.checking ? t.updates.checking : apt.checked_at ? t.updates.checkedAt(ago(apt.checked_at)) : t.updates.neverChecked}</T>
+              <T v="caption">
+                {[apt.checking ? t.updates.checking : apt.checked_at ? t.updates.checkedAt(ago(apt.checked_at)) : t.updates.neverChecked, heldCount ? t.updates.heldCount(heldCount) : null]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </T>
             </View>
             {apt.security_count ? <StatusPill level="warning" label={t.updates.security(apt.security_count)} /> : apt.count ? null : <StatusPill level="ok" label="OK" />}
           </Row>
@@ -112,9 +124,12 @@ export default function UpdatesScreen() {
             </T>
           ) : null}
           {apt.reboot_required ? (
-            <T v="caption" style={{ color: colors.amber }}>
-              {t.updates.rebootRequired}
-            </T>
+            <>
+              <T v="caption" style={{ color: colors.amber }}>
+                {t.updates.rebootRequired}
+              </T>
+              <Button label={t.updates.rebootNow} kind="secondary" icon="power" onPress={() => router.push('/power')} />
+            </>
           ) : null}
           {apt.error ? (
             <T v="caption" style={{ color: colors.amber }}>
@@ -122,14 +137,14 @@ export default function UpdatesScreen() {
             </T>
           ) : null}
           {!apt.allowed ? <T v="caption">{t.updates.disabled}</T> : null}
-          <Row>
+          <ButtonRow>
             <Button
               label={t.updates.checkNow}
               kind="secondary"
               icon="refresh-cw"
               disabled={!apt.allowed || apt.checking || aptRunning}
               loading={check.isPending}
-              style={{ flex: 1 }}
+              style={isOdyssey() ? undefined : { flex: 1 }}
               onPress={() => void run(() => check.mutateAsync(undefined))}
             />
             <Button
@@ -137,7 +152,7 @@ export default function UpdatesScreen() {
               icon="download"
               disabled={!apt.allowed || !apt.count || aptRunning || !!apt.blocked_reason}
               loading={install.isPending || aptRunning}
-              style={{ flex: 1 }}
+              style={isOdyssey() ? undefined : { flex: 1 }}
               onPress={() =>
                 setConfirm({
                   title: t.updates.install,
@@ -154,14 +169,33 @@ export default function UpdatesScreen() {
                 })
               }
             />
-          </Row>
+          </ButtonRow>
           {apt.upgrade.started_at ? (
             <>
               <Divider />
               {!aptRunning && apt.upgrade.result ? (
-                <KeyValue k={t.updates.lastRun} v={`${t.updates.result(lastOk)} · ${ago(apt.upgrade.finished_at ?? apt.upgrade.started_at)}`} />
+                <KeyValue
+                  k={t.updates.lastRun}
+                  v={[t.updates.result(lastOk), last && last.upgraded !== null ? t.updates.summary(last.upgraded, last.newly_installed ?? 0) : null, ago(apt.upgrade.finished_at ?? apt.upgrade.started_at)]
+                    .filter(Boolean)
+                    .join(' · ')}
+                />
               ) : null}
               <RunLog run={apt.upgrade} />
+            </>
+          ) : null}
+          {heldCount && !aptRunning ? (
+            <>
+              <Divider />
+              <T v="caption">
+                {[
+                  reasons.has('removal') || reasons.has('other') ? t.updates.heldRemoval(removes) : null,
+                  reasons.has('phased') ? t.updates.heldPhased : null,
+                  reasons.has('hold') ? t.updates.heldHold : null,
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+              </T>
             </>
           ) : null}
           {pkgs.length ? (
@@ -174,6 +208,7 @@ export default function UpdatesScreen() {
                     {p.name}
                   </T>
                   {p.security ? <StatusPill compact level="warning" label="security" /> : null}
+                  {isHeld(p) ? <StatusPill compact level="unknown" label={p.reason === 'phased' ? t.updates.phased : p.reason === 'hold' ? t.updates.onHold : t.updates.keptBack} /> : null}
                   <T v="monoSmall" numberOfLines={1} style={{ maxWidth: '45%' }}>
                     {p.to}
                   </T>
@@ -216,14 +251,14 @@ export default function UpdatesScreen() {
             </View>
           ) : null}
           {!ag.allowed ? <T v="caption">{t.updates.disabled}</T> : null}
-          <Row>
+          <ButtonRow>
             <Button
               label={t.updates.agentCheck}
               kind="secondary"
               icon="refresh-cw"
               loading={recheckAgent.isPending}
               disabled={agRunning}
-              style={{ flex: 1 }}
+              style={isOdyssey() ? undefined : { flex: 1 }}
               onPress={() => recheckAgent.mutate(undefined, { onError: (e) => toast.error(errorMessage(e)) })}
             />
             {ag.update_available && ag.latest ? (
@@ -232,7 +267,7 @@ export default function UpdatesScreen() {
                 icon="arrow-up-circle"
                 disabled={!ag.allowed || agRunning}
                 loading={startAgent.isPending || agRunning}
-                style={{ flex: 1 }}
+                style={isOdyssey() ? undefined : { flex: 1 }}
                 onPress={() =>
                   setConfirm({
                     title: t.updates.agentUpdate(ag.latest!),
@@ -250,7 +285,7 @@ export default function UpdatesScreen() {
                 }
               />
             ) : null}
-          </Row>
+          </ButtonRow>
           {ag.run.started_at ? <RunLog run={ag.run} /> : null}
         </Card>
       ) : null}

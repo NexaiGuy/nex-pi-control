@@ -6,6 +6,7 @@ Een falende schijf moet altijd bovenaan komen. Bij twijfel kiezen we de strenger
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -27,7 +28,37 @@ ATA_CRC = 199
 ATA_TEMPERATURE = (194, 190)
 ATA_POWER_ON_HOURS = 9
 
+SSD_LIFE_LEFT = 231  # genormaliseerde waarde = resterende levensduur in procent (Transcend, Kingston, ...)
+
 SEVERITY = {"ok": 0, "unknown": 1, "warning": 2, "failing": 3}
+
+# Een USB-adapter die een commando niet kent, antwoordt met "unsupported scsi opcode" of "unsupported field".
+# Dat is een beperking van de adapter, geen signaal van de schijf. "aborted command" is dat wel.
+ADAPTER_UNSUPPORTED = re.compile(r"unsupported (scsi opcode|field in scsi command)|not supported", re.I)
+DISK_ABORTED = re.compile(r"aborted command|checksum", re.I)
+
+
+def _messages(data: dict[str, Any]) -> list[str]:
+    msgs = (data.get("smartctl") or {}).get("messages") or []
+    return [str(m.get("string", "")) for m in msgs if isinstance(m, dict) and m.get("severity") in ("error", "warning")]
+
+
+def adapter_limitation_only(data: dict[str, Any], transport: str = "") -> bool:
+    """True als de afbreking van de USB-adapter komt en niet van de schijf.
+
+    1. smartctl meldt enkel "unsupported scsi opcode/field" of "not supported", nooit "aborted command"; of
+    2. (smartctl zet die melding niet altijd in de JSON) USB-schijf, gezondheid PASSED en een volledige attributentabel,
+       en geen enkele melding van een afgebroken commando. Een stervende schijf breekt net het lezen van die tabel af.
+    """
+    msgs = _messages(data)
+    if any(DISK_ABORTED.search(m) for m in msgs):
+        return False
+    errors = [m for m in msgs if re.search(r"fail|abort|error", m, re.I)]
+    if errors and all(ADAPTER_UNSUPPORTED.search(m) for m in errors):
+        return True
+    status = data.get("smart_status")
+    table = (data.get("ata_smart_attributes") or {}).get("table") or []
+    return transport == "usb" and isinstance(status, dict) and status.get("passed") is True and len(table) >= 3
 
 
 def _raw(attr: dict[str, Any]) -> int:
@@ -41,6 +72,15 @@ def _raw(attr: dict[str, Any]) -> int:
         return int(s)
     except ValueError:
         return 0
+
+
+def has_smart_data(data: dict[str, Any]) -> bool:
+    """True als smartctl echte gezondheidsgegevens teruggaf (status, ATA-attributen of NVMe-log)."""
+    return (
+        isinstance(data.get("smart_status"), dict)
+        or bool((data.get("ata_smart_attributes") or {}).get("table"))
+        or isinstance(data.get("nvme_smart_health_information_log"), dict)
+    )
 
 
 def _worse(a: str, b: str) -> str:
@@ -68,17 +108,31 @@ def evaluate(record: dict[str, Any], previous_crc: int | None = None, now: float
         "serial": data.get("serial_number", ""),
         "firmware": data.get("firmware_version", ""),
         "protocol": (data.get("device") or {}).get("protocol", ""),
-        "capacity_bytes": (data.get("user_capacity") or {}).get("bytes"),
+        "capacity_bytes": (data.get("user_capacity") or {}).get("bytes") or record.get("size_bytes") or None,
         "temperature_c": (data.get("temperature") or {}).get("current"),
         "power_on_hours": (data.get("power_on_time") or {}).get("hours"),
         "smart_supported": True,
         "attributes": {},
         "crc_errors": None,
+        "health_source": "smart",
+        "transport": record.get("transport") or "",
+        "device_type": record.get("device_type") or "",
+        "size_bytes": record.get("size_bytes"),
+        "removable": bool(record.get("removable")),
+        "partitions": record.get("partitions") or [],
+        "error_log_available": (record.get("error_log") or {}).get("available", True) if record.get("error_log") is not None else None,
     }
+    if not info["serial"]:
+        info["serial"] = record.get("serial") or ""
 
     if record.get("unsupported"):
         info["smart_supported"] = False
-        return {**info, "status": "unknown", "reasons": [L("SMART niet ondersteund door dit apparaat", "SMART not supported by this device")], "collected_at": record.get("collected_at")}
+        if record.get("transport") == "usb":
+            why = L("De USB-adapter van deze schijf geeft geen SMART-gegevens door. Gezondheid onbekend.",
+                    "This disk's USB adapter does not pass SMART data through. Health unknown.")
+        else:
+            why = L("SMART niet ondersteund door dit apparaat", "SMART not supported by this device")
+        return {**info, "status": "unknown", "reasons": [why], "problems": [], "stale": False, "collected_at": record.get("collected_at")}
 
     collected = float(record.get("collected_at") or 0)
     if now - collected > STALE_SECONDS:
@@ -90,7 +144,11 @@ def evaluate(record: dict[str, Any], previous_crc: int | None = None, now: float
     if exit_code & 0b10:
         flag("warning", L("Schijf kon niet geopend worden voor SMART", "Disk could not be opened for SMART"))
     if exit_code & 0b100:
-        flag("warning", L("SMART-commando afgebroken of checksumfout", "SMART command aborted or checksum error"))
+        if has_smart_data(data) and adapter_limitation_only(data, str(record.get("transport") or "")):
+            # Bv. Transcend ESD310C: de adapter kent SMART RETURN STATUS niet, smartctl leidt de gezondheid af uit de attributen.
+            info["health_source"] = "attributes"
+        else:
+            flag("warning", L("SMART-commando afgebroken of checksumfout", "SMART command aborted or checksum error"))
     if exit_code & 0b1000:
         flag("failing", L("SMART meldt: schijf faalt", "SMART reports: disk is failing"))
     if exit_code & 0b10000:
@@ -140,6 +198,12 @@ def evaluate(record: dict[str, Any], previous_crc: int | None = None, now: float
             if tid in by_id:
                 info["temperature_c"] = _raw(by_id[tid]) & 0xFF
                 break
+    if SSD_LIFE_LEFT in by_id:
+        life = by_id[SSD_LIFE_LEFT].get("value")
+        if isinstance(life, int) and 0 <= life <= 100:
+            attrs["life_left"] = life
+            if life <= 10:
+                flag("warning", L(f"Nog {life}% levensduur over", f"{life}% life left"))
     if info["power_on_hours"] is None and ATA_POWER_ON_HOURS in by_id:
         info["power_on_hours"] = _raw(by_id[ATA_POWER_ON_HOURS])
 
@@ -166,8 +230,8 @@ def evaluate(record: dict[str, Any], previous_crc: int | None = None, now: float
         if info["power_on_hours"] is None:
             info["power_on_hours"] = nvme.get("power_on_hours")
 
-    # Capaciteit
-    reported = info["capacity_bytes"]
+    # Capaciteit (enkel wat de schijf zelf rapporteert, niet de lsblk-terugval)
+    reported = (data.get("user_capacity") or {}).get("bytes")
     size = record.get("size_bytes")
     if isinstance(reported, int) and isinstance(size, int) and size > 0 and reported > 0:
         if abs(reported - size) / size > 0.01:
@@ -181,9 +245,19 @@ def evaluate(record: dict[str, Any], previous_crc: int | None = None, now: float
         if bad_model in model_l and info["firmware"] in fws:
             flag("warning", L(f"Firmware {info['firmware']} heeft gekende defecten, update aanbevolen", f"Firmware {info['firmware']} has known defects, update recommended"))
 
+    # Zonder gezondheidsgegevens is "ok" nooit verdiend: dan weten we het gewoon niet.
+    if not has_smart_data(data) and status == "ok":
+        status = "unknown"
+        info["smart_supported"] = False
+        if exit_code & 0b1:
+            flagged.append((-SEVERITY["unknown"], len(flagged), L("smartctl herkent het apparaattype niet, gezondheid onbekend",
+                                                                   "smartctl does not recognise the device type, health unknown")))
+        else:
+            flagged.append((-SEVERITY["unknown"], len(flagged), L("Geen SMART-gegevens ontvangen, gezondheid onbekend", "No SMART data received, health unknown")))
+
     info["attributes"] = attrs
     reasons = [r for _, _, r in sorted(flagged)]  # ernstigste eerst
-    problems = [r for r in reasons if not (stale and r == stale_text)]
+    problems = [r for r in reasons if not (stale and r == stale_text)] if status in ("warning", "failing") else []
     return {**info, "status": status, "reasons": reasons, "problems": problems, "stale": stale, "collected_at": record.get("collected_at")}
 
 

@@ -1,0 +1,33 @@
+#!/bin/sh
+# Rustige opstart: begrenst de CPU van alle systeemdiensten en Docker-containers (system.slice)
+# tijdens de eerste minuten na het opstarten. Enkel tijdelijk (--runtime): na een herstart is het weg,
+# en de release-timer heft het na de ingestelde tijd op.
+#   hal-boot-calm start   begrens (CPU_PERCENT van alle kernen samen)
+#   hal-boot-calm stop    hef de grens op
+#   hal-boot-calm status  toon de huidige grens
+set -eu
+CONF=/etc/hal-boot-calm.conf
+CPU_PERCENT=70
+[ -r "$CONF" ] && . "$CONF"
+case "$CPU_PERCENT" in ''|*[!0-9]*) CPU_PERCENT=70 ;; esac
+if [ "$CPU_PERCENT" -lt 30 ] || [ "$CPU_PERCENT" -gt 100 ]; then CPU_PERCENT=70; fi
+CORES="$(nproc)"
+QUOTA=$((CPU_PERCENT * CORES))
+
+case "${1:-}" in
+  start)
+    systemctl set-property --runtime system.slice "CPUQuota=${QUOTA}%"
+    logger -t hal-boot-calm "boot: system.slice capped at ${CPU_PERCENT}% of ${CORES} cores (CPUQuota=${QUOTA}%)" || true
+    ;;
+  stop)
+    systemctl set-property --runtime system.slice "CPUQuota="
+    logger -t hal-boot-calm "boot settled: CPU cap on system.slice lifted" || true
+    ;;
+  status)
+    systemctl show system.slice -p CPUQuotaPerSecUSec
+    ;;
+  *)
+    echo "usage: hal-boot-calm start|stop|status" >&2
+    exit 2
+    ;;
+esac

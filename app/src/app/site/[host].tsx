@@ -30,6 +30,7 @@ export default function SiteDetail() {
           <KeyValue k={t.system.tls} v={s.tls_expires_at ? `${dateTime(s.tls_expires_at)} (${s.tls_days_left} d)` : '–'} />
           <KeyValue k={t.system.local} v={s.local ?? '–'} />
           <KeyValue k={t.system.localHttp} v={s.local_status ? `${s.local_status} · ${s.local_latency_ms} ms` : s.local ? s.local_error ?? 'down' : '–'} />
+          {s.source ? <KeyValue k={t.system.source} v={s.source} /> : null}
           <KeyValue k={t.system.checked} v={dateTime(s.checked_at)} />
         </Card>
       ) : null}

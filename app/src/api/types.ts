@@ -63,6 +63,32 @@ export interface SmartDisk extends SmartSummary {
   collected_at?: number | null;
 }
 
+export interface Partition {
+  device: string;
+  size_bytes: number;
+  fstype: string;
+  label: string;
+  mountpoints: string[];
+  /** Het mountpunt dat de agent toont (bij meerdere: het echte, niet een sandbox-bind zoals /var/tmp). */
+  mountpoint?: string | null;
+  used?: number | null;
+  total?: number | null;
+  percent?: number | null;
+}
+
+/** Sinds agent 1.2.1: elke fysieke schijf (SD, NVMe, SATA, USB) met partities en de SMART-beoordeling. */
+export interface PhysicalDisk extends SmartDisk {
+  transport?: string;
+  size_bytes?: number | null;
+  removable?: boolean;
+  device_type?: string;
+  /** false als de USB-adapter het foutlogboek niet doorgeeft (geen faalsignaal). */
+  error_log_available?: boolean;
+  /** "attributes": de adapter kent het statuscommando niet, gezondheid afgeleid uit de attributen. */
+  health_source?: 'smart' | 'attributes';
+  partitions?: Partition[];
+}
+
 export interface DiskAlarm {
   device: string;
   status: SmartStatus;
@@ -118,6 +144,7 @@ export interface DeviceInfo {
 export interface Disks {
   mounts: Mount[];
   smart: SmartDisk[];
+  disks?: PhysicalDisk[];
   disk_alarms: DiskAlarm[];
 }
 
@@ -202,6 +229,23 @@ export interface Site {
   local_state?: string;
   local_error?: string;
   checked_at?: number;
+  /** Waar de hostname vandaan komt: de tunnel (cloudflared-config), nginx of sites.yml. */
+  source?: string | null;
+}
+
+export interface SiteDiscovery {
+  enabled: boolean;
+  generated_at: number | null;
+  sources: { label: string; kind: string; count: number }[];
+  /** Tunnels met een token: hun hostnames staan enkel in het Cloudflare-dashboard. */
+  remote_tunnels: string[];
+  excluded: number;
+}
+
+export interface SitesResponse {
+  sites: Site[];
+  updated_at: number | null;
+  discovery?: SiteDiscovery;
 }
 
 export interface Process {
@@ -220,13 +264,21 @@ export interface Process {
 export interface Backup {
   name: string;
   path: string;
-  state: 'ok' | 'empty' | 'no_access';
+  state: 'ok' | 'empty' | 'no_access' | 'failed';
   latest_file?: string;
   latest_at?: number;
   latest_size?: number;
   age_seconds?: number;
   total_size?: number;
   files?: number;
+  /** Sinds agent 1.2.1: "job" wordt bewaakt, "archive" (eenmalige kopie of genegeerd) nooit. */
+  kind?: 'job' | 'archive';
+  reason?: 'ignored' | 'snapshot' | null;
+  max_age_seconds?: number;
+  /** Sinds agent 1.2.1: "timer" = systemd-timer (laatste run en resultaat), anders een map. */
+  source?: 'timer' | 'dir';
+  result?: string | null;
+  description?: string;
 }
 
 export interface Ports {
@@ -407,12 +459,19 @@ export interface AptPackage {
   from: string;
   to: string;
   security: boolean;
+  /** Sinds agent 1.2.3: de installknop neemt dit pakket niet mee (zie reason). */
+  held?: boolean;
+  reason?: 'removal' | 'phased' | 'hold' | 'other' | null;
 }
 
 export interface UpdatesState {
   checked_at: number | null;
   count: number;
   security_count: number;
+  /** Sinds agent 1.2.3: count = installeerbaar; held_count = tegengehouden. */
+  held_count?: number;
+  /** Wat `sudo apt full-upgrade` zou verwijderen om de tegengehouden pakketten bij te werken. */
+  full_upgrade_removes?: string[];
   packages: AptPackage[];
   reboot_required: boolean;
   error: string | null;
@@ -420,6 +479,8 @@ export interface UpdatesState {
   checking: boolean;
   upgrade: UnitRun;
   blocked_reason: string | null;
+  /** Sinds agent 1.2.1: samenvatting van de laatste installatie. kept_back = wat nog openstaat omdat het iets zou verwijderen. */
+  last_upgrade?: { at: number | null; rc: number | null; upgraded: number | null; newly_installed: number | null; not_upgraded: number | null; kept_back: string[] } | null;
 }
 
 export interface AgentUpdateState {

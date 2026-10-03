@@ -4,7 +4,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { api, errorMessage } from '@/api/client';
 import { useContainers, useProcesses, useServices, useShellState, useSites } from '@/api/hooks';
-import type { Container, Process } from '@/api/types';
+import type { Container, Process, Site } from '@/api/types';
 import { ListGroup, ListRow } from '@/components/ListRow';
 import { Screen } from '@/components/layout';
 import { ConfirmSheet, EmptyState, ErrorState, HoldButton, SearchField, Sheet, SkeletonList, toast, type ConfirmSpec } from '@/components/overlays';
@@ -45,9 +45,12 @@ export default function SystemScreen() {
 }
 
 
+const PAGE = 60;
+
 function Services() {
   const [filter, setFilter] = useState<'all' | 'custom' | 'failed' | 'active'>('all');
   const [q, setQ] = useState('');
+  const [showAll, setShowAll] = useState(false);
   const svc = useServices('all');
   const list = useMemo(() => {
     const all = svc.data ?? [];
@@ -78,7 +81,8 @@ function Services() {
       {svc.data && !list.length ? <EmptyState icon="server" title={t.system.noServices} /> : null}
       {list.length ? (
         <ListGroup>
-          {list.map((s, i) => {
+          {/* Honderden rijen tegelijk maken het scrollen stroef: eerst 60, de rest op vraag. Zoeken werkt altijd op alles. */}
+          {(showAll || q ? list : list.slice(0, PAGE)).map((s, i) => {
             const st = serviceLevel(s);
             return (
               <View key={s.name}>
@@ -96,6 +100,7 @@ function Services() {
           })}
         </ListGroup>
       ) : null}
+      {!showAll && !q && list.length > PAGE ? <Button label={t.updates.showAll(list.length)} kind="ghost" onPress={() => setShowAll(true)} /> : null}
     </View>
   );
 }
@@ -149,28 +154,55 @@ function Containers() {
 
 function Sites() {
   const s = useSites();
+  const [q, setQ] = useState('');
+  const all = s.data?.sites;
+  const disc = s.data?.discovery;
+  // Per tunnel gegroepeerd (bron uit hal-sites-discover); zonder bron alles in één groep.
+  const groups = useMemo(() => {
+    const g = new Map<string, Site[]>();
+    for (const x of all ?? []) {
+      if (q && !x.hostname.includes(q.toLowerCase())) continue;
+      const k = x.source || '';
+      const l = g.get(k) ?? [];
+      l.push(x);
+      g.set(k, l);
+    }
+    return [...g.entries()].sort(([a], [b]) => (a === 'sites.yml' ? 1 : b === 'sites.yml' ? -1 : a.localeCompare(b)));
+  }, [all, q]);
+  const many = (all?.length ?? 0) > 8;
   return (
     <View style={{ gap: space.md }}>
       {!s.data && s.isLoading ? <SkeletonList /> : null}
       {!s.data && s.error ? <ErrorState error={s.error} onRetry={() => void s.refetch()} /> : null}
-      {s.data ? (
-        <ListGroup>
-          {s.data.sites.map((x, i) => {
-            const st = siteLevel(x);
-            return (
-              <View key={x.hostname}>
-                {i ? <Divider /> : null}
-                <ListRow
-                  left={<Dot level={st.level} />}
-                  title={x.hostname}
-                  subtitle={`${st.label} · ${x.latency_ms ?? '–'} ms · TLS ${x.tls_days_left ?? '–'} d${x.local ? ` · :${x.local.split(':').pop()}` : ''}`}
-                  onPress={() => router.push({ pathname: '/site/[host]', params: { host: x.hostname } })}
-                />
-              </View>
-            );
-          })}
-        </ListGroup>
+      {many ? <SearchField value={q} onChange={setQ} /> : null}
+      {all ? (
+        <T v="caption">
+          {disc?.enabled && disc.sources.length ? t.system.sitesFound(all.length, disc.sources.length) : t.system.sitesCount(all.length)}
+        </T>
       ) : null}
+      {groups.map(([source, list]) => (
+        <View key={source || '-'} style={{ gap: space.xs }}>
+          {groups.length > 1 ? <SectionTitle>{source === 'sites.yml' ? t.system.sitesManual : source || t.system.sitesManual}</SectionTitle> : null}
+          <ListGroup>
+            {list.map((x, i) => {
+              const st = siteLevel(x);
+              return (
+                <View key={x.hostname}>
+                  {i ? <Divider /> : null}
+                  <ListRow
+                    left={<Dot level={st.level} />}
+                    title={x.hostname}
+                    subtitle={`${st.label} · ${x.latency_ms ?? '–'} ms · TLS ${x.tls_days_left ?? '–'} d${x.local ? ` · :${x.local.split(':').pop()}` : ''}`}
+                    onPress={() => router.push({ pathname: '/site/[host]', params: { host: x.hostname } })}
+                  />
+                </View>
+              );
+            })}
+          </ListGroup>
+        </View>
+      ))}
+      {all && q && !groups.length ? <EmptyState icon="globe" title={t.system.noMatch} /> : null}
+      {disc?.remote_tunnels.length ? <T v="caption">{t.system.remoteTunnels(disc.remote_tunnels.join(', '))}</T> : null}
     </View>
   );
 }

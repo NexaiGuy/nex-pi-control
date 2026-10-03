@@ -80,11 +80,23 @@ def conditions(smart: list[dict[str, Any]], services: list[dict[str, Any]], cont
     return out
 
 
+# Hoeveel controles na elkaar (elke 30 s) een probleem moet blijven bestaan voor het een gebeurtenis wordt, en hoeveel
+# controles na elkaar het weg moet zijn voor het "opgelost" is. Zo geeft een site die één keer traag antwoordt of een
+# dienst die even herstart geen reeks meldingen (probleem, opgelost, probleem, ...). Schijf en updates: meteen.
+OPEN_AFTER: dict[str, int] = {"site": 4, "service": 2, "container": 2}
+CLEAR_AFTER: dict[str, int] = {"site": 6, "service": 2, "container": 2}
+
+
 class EventStore:
     """Gebeurtenissen in SQLite. Max 30 dagen en 2000 rijen."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, debounce: bool = True) -> None:
         self.path = path
+        self.open_after = OPEN_AFTER if debounce else {}
+        self.clear_after = CLEAR_AFTER if debounce else {}
+        # Tellers in het geheugen: na een herstart begint de telling opnieuw, wat enkel een melding iets uitstelt.
+        self._seen: dict[str, int] = {}
+        self._missed: dict[str, int] = {}
         self._lock = threading.Lock()
         self._db = sqlite3.connect(str(path), check_same_thread=False)
         self._db.execute("PRAGMA journal_mode=WAL")
@@ -95,25 +107,43 @@ class EventStore:
         self._db.execute("CREATE TABLE IF NOT EXISTS open (key TEXT PRIMARY KEY, event_id INTEGER NOT NULL)")
         self._db.commit()
 
-    def sync(self, current_conditions: dict[str, dict[str, Any]], now: int | None = None) -> int:
-        """Vergelijkt met de open problemen. Geeft het aantal nieuwe gebeurtenissen terug."""
+    def sync(self, current_conditions: dict[str, dict[str, Any]], now: int | None = None, unknown_kinds: set[str] | frozenset[str] = frozenset()) -> int:
+        """Vergelijkt met de open problemen. Geeft het aantal nieuwe gebeurtenissen terug.
+
+        unknown_kinds: soorten waarvan de collector nu geen gegevens heeft (net gestart, Docker onbereikbaar). Hun open
+        problemen blijven open; "geen gegevens" is niet hetzelfde als "opgelost".
+        """
         now = now or int(time.time())
         added = 0
         with self._lock:
             open_keys = dict(self._db.execute("SELECT key, event_id FROM open").fetchall())
             for key, c in current_conditions.items():
+                self._missed.pop(key, None)
                 if key in open_keys:
                     continue
+                self._seen[key] = self._seen.get(key, 0) + 1
+                if self._seen[key] < self.open_after.get(c["kind"], 1):
+                    continue
+                self._seen.pop(key, None)
                 cur = self._db.execute(
                     "INSERT INTO events (ts, level, kind, key, resolved, data) VALUES (?,?,?,?,0,?)",
                     (now, c["level"], c["kind"], key, json.dumps({"title": c["title"], "body": c["body"]})),
                 )
                 self._db.execute("INSERT INTO open (key, event_id) VALUES (?,?)", (key, cur.lastrowid))
                 added += 1
+            for key in [k for k in self._seen if k not in current_conditions]:
+                del self._seen[key]  # de reeks is onderbroken: opnieuw beginnen met tellen
             for key, event_id in open_keys.items():
                 if key in current_conditions:
                     continue
                 row = self._db.execute("SELECT kind, data FROM events WHERE id=?", (event_id,)).fetchone()
+                if row and row[0] in unknown_kinds:
+                    continue
+                if row:
+                    self._missed[key] = self._missed.get(key, 0) + 1
+                    if self._missed[key] < self.clear_after.get(row[0], 1):
+                        continue
+                self._missed.pop(key, None)
                 self._db.execute("DELETE FROM open WHERE key=?", (key,))
                 if not row:
                     continue
@@ -162,20 +192,42 @@ def read_apt_status(path: Path) -> dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return {"checked_at": None, "count": 0, "security_count": 0, "packages": [], "reboot_required": False, "error": None}
+        return {"checked_at": None, "count": 0, "held_count": 0, "security_count": 0, "full_upgrade_removes": [], "packages": [], "reboot_required": False,
+                "error": None, "last_upgrade": None}
     pkgs = []
     for p in data.get("packages") or []:
         if isinstance(p, dict) and isinstance(p.get("name"), str):
+            reason = p.get("reason") if p.get("reason") in ("hold", "phased", "removal", "other") else None
             pkgs.append({"name": p["name"][:100], "from": str(p.get("from") or "")[:60], "to": str(p.get("to") or "")[:60],
-                         "security": bool(p.get("security"))})
+                         "security": bool(p.get("security")), "held": bool(p.get("held")), "reason": reason if p.get("held") else None})
+    ready = [p for p in pkgs if not p["held"]]
+    # Installeerbaar = wat de knop echt bijwerkt. Tegengehouden pakketten tellen apart en geven geen "update klaar".
     return {
         "checked_at": data.get("checked_at"),
-        "count": len(pkgs),
-        "security_count": sum(1 for p in pkgs if p["security"]),
-        "packages": pkgs[:300],
+        "count": len(ready),
+        "held_count": len(pkgs) - len(ready),
+        "security_count": sum(1 for p in ready if p["security"]),
+        "full_upgrade_removes": [str(x)[:100] for x in data.get("full_upgrade_removes") or [] if isinstance(x, str)][:50],
+        "packages": sorted(pkgs, key=lambda p: (p["held"], not p["security"], p["name"]))[:300],
         "reboot_required": bool(data.get("reboot_required")),
         "error": (str(data["error"])[:300] if data.get("error") else None),
+        "last_upgrade": _last_upgrade(path.with_name("last-upgrade.json"), {p["name"] for p in pkgs}),
     }
+
+
+def _last_upgrade(path: Path, still_upgradable: set[str]) -> dict[str, Any] | None:
+    """Samenvatting van de laatste installatie (hal-apt-upgrade): hoeveel, en wat tegengehouden werd en nog openstaat."""
+    try:
+        d = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    def num(k: str) -> int | None:
+        v = d.get(k)
+        return v if isinstance(v, int) and v >= 0 else None
+    kept = [str(x)[:100] for x in d.get("kept_back") or [] if isinstance(x, str)]
+    return {"at": num("at"), "rc": d.get("rc") if isinstance(d.get("rc"), int) else None, "upgraded": num("upgraded"),
+            "newly_installed": num("newly_installed"), "not_upgraded": num("not_upgraded"),
+            "kept_back": [k for k in kept if k in still_upgradable][:200]}
 
 
 # --- Agent-updates -------------------------------------------------------------------------------------------

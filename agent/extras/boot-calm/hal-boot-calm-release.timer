@@ -1,0 +1,9 @@
+[Unit]
+Description=Nex Pi Control: lift the calm-boot CPU cap once startup has settled
+
+[Timer]
+OnBootSec=@MINUTES@min
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

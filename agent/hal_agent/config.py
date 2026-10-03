@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import threading
@@ -12,6 +13,8 @@ from typing import Any
 import yaml
 
 from hal_common.auth import normalize_team_domain
+
+from .collectors.site_discovery import merge_sites
 
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
 UNIT_RE = re.compile(r"^[A-Za-z0-9@_.:\\-]{1,200}\.service$")
@@ -103,15 +106,45 @@ class YamlConfig:
             return self._data
 
 
+class JsonFile:
+    """Leest een JSON-bestand opnieuw in zodra het wijzigt (zoals discovered.json van de root-collector)."""
+
+    def __init__(self, path: Path | None) -> None:
+        self.path = path
+        self._mtime: float | None = None
+        self._data: Any = None
+        self._lock = threading.Lock()
+
+    def get(self) -> Any:
+        if self.path is None:
+            return None
+        with self._lock:
+            try:
+                mtime = self.path.stat().st_mtime
+            except OSError:
+                self._data, self._mtime = None, None
+                return None
+            if mtime != self._mtime:
+                try:
+                    self._data = json.loads(self.path.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    self._data = None
+                self._mtime = mtime
+            return self._data
+
+
 @dataclass
 class ConfigFiles:
     config_dir: Path
+    discovered_sites_path: Path | None = None
     allowed_actions: YamlConfig = field(init=False)
     commands: YamlConfig = field(init=False)
     wol: YamlConfig = field(init=False)
     sensors: YamlConfig = field(init=False)
     gpio: YamlConfig = field(init=False)
     sites: YamlConfig = field(init=False)
+    discovered_sites: JsonFile = field(init=False)
+    backups: YamlConfig = field(init=False)
 
     def __post_init__(self) -> None:
         d = self.config_dir
@@ -121,6 +154,8 @@ class ConfigFiles:
         self.sensors = YamlConfig(d / "sensors.yml", {"sensors": []})
         self.gpio = YamlConfig(d / "gpio.yml", {"allowed_pins": [], "labels": {}})
         self.sites = YamlConfig(d / "sites.yml", {"sites": []})
+        self.discovered_sites = JsonFile(self.discovered_sites_path)
+        self.backups = YamlConfig(d / "backups.yml", {"max_age_hours": 36, "ignore": [], "snapshots_are_archive": True, "timers": ["*backup*"]})
 
     # Gevalideerde weergaven -------------------------------------------------
 
@@ -211,14 +246,29 @@ class ConfigFiles:
                 continue
         return labels
 
-    def site_list(self) -> list[dict[str, Any]]:
-        out = []
-        for s in self.sites.get().get("sites") or []:
-            if not isinstance(s, dict):
-                continue
-            host = str(s.get("hostname", "")).lower()
-            if not HOST_RE.match(host):
-                continue
-            local = s.get("local")
-            out.append({"hostname": host, "local": str(local) if local else None, "path": str(s.get("path") or "/")})
-        return out
+    def backup_policy(self) -> dict[str, Any]:
+        """Welke back-upmappen bewaakt worden en hoe oud ze mogen zijn (backups.yml)."""
+        raw = self.backups.get()
+        try:
+            hours = max(1, min(int(raw.get("max_age_hours", 36)), 24 * 90))
+        except (TypeError, ValueError):
+            hours = 36
+        ignore = [str(x)[:120] for x in (raw.get("ignore") or []) if isinstance(x, str | int)]
+        timers = [str(x)[:120] for x in (raw.get("timers") or []) if isinstance(x, str)]
+        return {"max_age_seconds": hours * 3600, "ignore": ignore, "snapshots_are_archive": raw.get("snapshots_are_archive", True) is not False,
+                "timers": timers}
+
+    def site_list(self, skip_local: set[str] | None = None) -> list[dict[str, Any]]:
+        """sites.yml plus de automatisch gevonden hostnames (hal-sites-discover). Zie site_discovery.merge_sites."""
+        return merge_sites(self.sites.get(), self.discovered_sites.get(), lambda h: bool(HOST_RE.match(h)), skip_local)
+
+    def site_discovery(self) -> dict[str, Any]:
+        """Wat de app toont over de automatische lijst: aan/uit, bronnen en tunnels die enkel in het dashboard staan."""
+        manual = self.sites.get()
+        d = self.discovered_sites.get()
+        d = d if isinstance(d, dict) else {}
+        sources = [{"label": str(x.get("label", ""))[:60], "kind": str(x.get("kind", ""))[:12], "count": int(x.get("count") or 0)}
+                   for x in d.get("sources") or [] if isinstance(x, dict)]
+        return {"enabled": manual.get("discover", True) is not False, "generated_at": d.get("generated_at"), "sources": sources,
+                "remote_tunnels": [str(x)[:60] for x in d.get("remote_tunnels") or [] if isinstance(x, str)],
+                "excluded": len([x for x in manual.get("exclude") or [] if isinstance(x, str)])}

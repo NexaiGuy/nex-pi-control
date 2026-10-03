@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from typing import Any
 
@@ -13,7 +14,9 @@ from hal_common.web import api_error, run
 
 from . import actions
 from .audit import AuditLog, parse_shell_audit
+from .collectors import disks as disk_inv
 from .collectors import misc
+from .collectors.backup_timers import timer_backups
 from .collectors.containers import ContainerCollector
 from .collectors.gpio import GpioManager, GpioUnavailable, discover_sensors, read_sensor
 from .collectors.services import ServiceCollector
@@ -43,7 +46,7 @@ class RealBackend:
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
-        self.config = ConfigFiles(settings.config_dir)
+        self.config = ConfigFiles(settings.config_dir, settings.state_dir / "sites" / "discovered.json")
         settings.state_dir.mkdir(parents=True, exist_ok=True)
         self.audit_log = AuditLog(settings.state_dir / "audit.db")
         self.history = HistoryStore(settings.state_dir / "history.db")
@@ -126,7 +129,9 @@ class RealBackend:
         await self.containers_c.refresh()
 
     async def _refresh_sites(self) -> None:
-        await self.sites_c.refresh(self.config.site_list())
+        # hal-shell staat standaard uit: zijn tunnel-hostname is geen site en zou anders altijd offline lijken.
+        shell = f"http://127.0.0.1:{os.environ.get('HAL_SHELL_PORT', '8121')}"
+        await self.sites_c.refresh(self.config.site_list({shell}))
 
     async def _refresh_services(self) -> None:
         self._services_snapshot = await self.services_c.list(force=True)
@@ -146,9 +151,18 @@ class RealBackend:
         await self._loop_every(30, self._refresh_events)
 
     async def _refresh_events(self) -> None:
-        conds = conditions(self.smart.read_all(), self._services_snapshot, self.containers_c.cached()["containers"],
+        ctr = self.containers_c.cached()
+        conds = conditions(self.smart.read_all(), self._services_snapshot, ctr["containers"],
                            list(self.sites_c.results.values()), read_apt_status(self.apt_path))
-        await asyncio.to_thread(self.events_store.sync, conds)
+        # Nog geen (geldige) meting: open problemen van die soort niet als "opgelost" melden.
+        unknown = set()
+        if self.sites_c.updated_at is None:
+            unknown.add("site")
+        if not self._services_snapshot:
+            unknown.add("service")
+        if ctr.get("updated_at") is None or ctr.get("error"):
+            unknown.add("container")
+        await asyncio.to_thread(self.events_store.sync, conds, None, unknown)
 
     async def _maintain(self) -> None:
         await asyncio.to_thread(self.history.maintain)
@@ -171,10 +185,17 @@ class RealBackend:
             "features": ["events", "updates", "agent_update", "container_restart"],
         }
 
-    def _backups(self) -> list[dict[str, Any]]:
+    async def _backups(self) -> list[dict[str, Any]]:
         if self._backups_cache and time.monotonic() - self._backups_cache[0] < 300:
             return self._backups_cache[1]
-        data = misc.backups(self.settings.backup_roots)
+        policy = self.config.backup_policy()
+        dirs = await asyncio.to_thread(lambda: misc.classify_backups(misc.backups(self.settings.backup_roots), policy))
+        try:
+            timers = await timer_backups(policy["timers"], policy["max_age_seconds"])
+        except Exception:  # systemctl onbereikbaar: de mappen tellen nog
+            log.exception("Back-uptimers lezen faalde")
+            timers = []
+        data = timers + dirs
         self._backups_cache = (time.monotonic(), data)
         return data
 
@@ -185,7 +206,7 @@ class RealBackend:
         services = self._services_snapshot or await self.services_c.list()
         containers = self.containers_c.cached()["containers"]
         sites = list(self.sites_c.results.values())
-        backups = await asyncio.to_thread(self._backups)
+        backups = await self._backups()
         return {
             "ts": int(time.time()),
             "health": compute_health(snap, m, smart, services, containers, sites, backups),
@@ -201,7 +222,9 @@ class RealBackend:
 
     async def disks(self) -> dict[str, Any]:
         smart = self.smart.read_all()
-        return {"mounts": mounts(), "smart": smart, "disk_alarms": disk_alarms(smart)}
+        m = mounts()
+        inv = await asyncio.to_thread(disk_inv.inventory)
+        return {"mounts": m, "smart": smart, "disks": disk_inv.merge(smart, inv, m), "disk_alarms": disk_alarms(smart)}
 
     async def acknowledge_crc(self) -> None:
         self.smart.acknowledge_crc()
@@ -241,13 +264,14 @@ class RealBackend:
             raise api_error(503, "unavailable", "Docker-proxy onbereikbaar")
 
     def sites(self) -> dict[str, Any]:
-        return {"sites": sorted(self.sites_c.results.values(), key=lambda s: s["hostname"]), "updated_at": self.sites_c.updated_at}
+        return {"sites": sorted(self.sites_c.results.values(), key=lambda s: s["hostname"]), "updated_at": self.sites_c.updated_at,
+                "discovery": self.config.site_discovery()}
 
     def processes(self, sort: str, limit: int, q: str | None) -> list[dict[str, Any]]:
         return self.processes_c.collector.list(sort=sort, limit=limit, query=q)
 
-    def backups(self) -> list[dict[str, Any]]:
-        return self._backups()
+    async def backups(self) -> list[dict[str, Any]]:
+        return await self._backups()
 
     def ports(self) -> dict[str, Any]:
         return misc.ports(self.settings.ports_file)

@@ -4,7 +4,7 @@ import { useBackups } from '@/api/hooks';
 import { ListGroup, ListRow } from '@/components/ListRow';
 import { DetailScreen } from '@/components/layout';
 import { EmptyState, ErrorState, SkeletonList } from '@/components/overlays';
-import { Divider, Dot, StatusPill } from '@/components/primitives';
+import { Divider, Dot, StatusPill, T } from '@/components/primitives';
 import { t } from '@/i18n';
 import { bytes, duration } from '@/lib/format';
 import { prefsStore } from '@/state/settings';
@@ -21,26 +21,39 @@ export default function BackupsScreen() {
       {q.data?.length ? (
         <ListGroup>
           {q.data.map((b, i) => {
-            const old = b.state === 'ok' && (b.age_seconds ?? 0) > maxH * 3600;
+            const archive = b.kind === 'archive';
+            const timer = b.source === 'timer';
+            const failed = b.state === 'failed';
+            const limit = b.max_age_seconds ?? maxH * 3600;
+            const old = !archive && b.state === 'ok' && (b.age_seconds ?? 0) > limit;
             return (
               <View key={b.path}>
                 {i ? <Divider /> : null}
                 <ListRow
-                  left={<Dot level={b.state !== 'ok' ? 'unknown' : old ? 'warning' : 'ok'} />}
+                  left={<Dot level={failed ? 'critical' : b.state !== 'ok' || archive ? 'unknown' : old ? 'warning' : 'ok'} />}
                   title={b.name}
                   subtitle={
-                    b.state === 'ok'
+                    timer
+                      ? [t.backups.timer, b.age_seconds !== undefined ? t.backups.lastRun(duration(b.age_seconds, 1)) : t.backups.noRun, b.result && b.result !== 'success' ? b.result : null, b.description || null]
+                          .filter(Boolean)
+                          .join(' · ')
+                      : b.state === 'ok'
                       ? `${t.backups.oldShort(duration(b.age_seconds ?? 0, 1))} · ${bytes(b.latest_size)} · ${b.files} ${t.backups.files} · ${bytes(b.total_size)} ${t.backups.total}`
                       : b.state === 'no_access'
                         ? t.backups.noAccess
                         : t.backups.empty
                   }
-                  right={old ? <StatusPill compact level="warning" label={t.backups.tooOld} /> : null}
+                  right={failed ? <StatusPill compact level="critical" label={t.backups.failed} /> : old ? <StatusPill compact level="warning" label={t.backups.tooOld} /> : archive ? <StatusPill compact level="unknown" label={t.backups.archive} /> : null}
                 />
               </View>
             );
           })}
         </ListGroup>
+      ) : null}
+      {q.data?.some((b) => b.kind === 'archive') ? (
+        <T v="caption" style={{ marginTop: 12 }}>
+          {t.backups.archiveNote}
+        </T>
       ) : null}
     </DetailScreen>
   );

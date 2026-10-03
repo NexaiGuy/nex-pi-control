@@ -1,0 +1,22 @@
+# Back-ups die de agent bewaakt, op twee manieren:
+# 1. systemd-timers waarvan de naam past bij `timers` hieronder: laatste run en of die gelukt is.
+# 2. Elke map onder HAL_AGENT_BACKUP_ROOTS (agent.env, standaard /var/backups) is een back-upset.
+# Een set geeft een waarschuwing als het nieuwste bestand erin ouder is dan max_age_hours.
+# De agent leest dit bestand opnieuw zodra het wijzigt, herstarten is niet nodig.
+
+max_age_hours: 36
+
+# Mappen die nooit een waarschuwing geven: archief, oude of eenmalige kopieën.
+# Naam of pad, glob-patronen mogen (bv. "oud-*", "/var/backups/archief/*").
+ignore: []
+  # - oude-export
+
+# Een map waarvan de naam eindigt op een datum, zoals site.be-20260920-010833, is een eenmalige kopie.
+# Die staat in de app als archief en geeft nooit een waarschuwing. Zet op false om ook die te bewaken.
+snapshots_are_archive: true
+
+# Back-ups die als systemd-timer draaien (glob op de naam van de timer of de dienst).
+# Een mislukte run geeft een waarschuwing. Een wekelijkse timer mag tot anderhalve week oud zijn.
+timers:
+  - "*backup*"
+  # - "kluis*"

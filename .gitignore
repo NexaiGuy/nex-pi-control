@@ -33,3 +33,7 @@ store/
 website/
 design/
 .hal-*.tgz
+
+# Lokale metingen en losse previews
+metingen/
+Claude outputs/

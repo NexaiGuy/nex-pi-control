@@ -3,7 +3,7 @@ import { cacheGet } from '@/api/cache';
 import { api } from '@/api/client';
 import type { Overview } from '@/api/types';
 import { t } from '@/i18n';
-import { connectionStore, hydrate, hydratedStore, isConfigured, serverName } from '@/state/settings';
+import { connectionStore, hydrate, hydratedStore, isConfigured, prefsStore, serverName } from '@/state/settings';
 
 import type { WidgetData } from './StatusWidget';
 
@@ -29,12 +29,13 @@ export async function loadWidgetData(): Promise<WidgetData> {
   if (!hydratedStore.get()) await hydrate();
   const conn = connectionStore.get();
   const name = conn.apiUrl || conn.demo ? serverName(conn) : 'Nex Pi Control';
-  if (!isConfigured(conn)) return toWidgetData(null, name, null, true);
+  const design = prefsStore.get().design;
+  if (!isConfigured(conn)) return { ...toWidgetData(null, name, null, true), design };
   try {
     const o = await api.get<Overview>('/v1/overview', undefined, { timeoutMs: 12000 });
-    return toWidgetData(o, name, Date.now(), false);
+    return { ...toWidgetData(o, name, Date.now(), false), design };
   } catch {
     const cached = cacheGet<Overview>(JSON.stringify(['overview']));
-    return toWidgetData(cached?.data ?? null, name, cached?.at ?? null, true);
+    return { ...toWidgetData(cached?.data ?? null, name, cached?.at ?? null, true), design };
   }
 }

@@ -1,0 +1,6 @@
+[Unit]
+Description=Nex Pi Control: lift the calm-boot CPU cap
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/hal-boot-calm stop

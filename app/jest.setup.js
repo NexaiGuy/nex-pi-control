@@ -31,7 +31,7 @@ jest.mock('expo-local-authentication', () => ({
   getEnrolledLevelAsync: jest.fn(async () => 2), authenticateAsync: jest.fn(async () => ({ success: true })), SecurityLevel: { NONE: 0 },
 }));
 jest.mock('expo-notifications', () => ({
-  setNotificationHandler: jest.fn(), scheduleNotificationAsync: jest.fn(async () => 'id'), setNotificationChannelAsync: jest.fn(async () => {}),
+  setNotificationHandler: jest.fn(), scheduleNotificationAsync: jest.fn(async () => 'id'), dismissNotificationAsync: jest.fn(async () => {}), setNotificationChannelAsync: jest.fn(async () => {}),
   getPermissionsAsync: jest.fn(async () => ({ granted: true })), requestPermissionsAsync: jest.fn(async () => ({ granted: true })),
   AndroidImportance: { HIGH: 4 }, AndroidNotificationPriority: { MAX: 'max', HIGH: 'high' },
 }));
@@ -55,7 +55,11 @@ jest.mock('expo-router', () => {
 });
 jest.mock('@expo/vector-icons', () => ({ Feather: () => null }));
 jest.mock('react-native-worklets', () => require('react-native-worklets/src/mock'));
-jest.mock('react-native-reanimated', () => require('react-native-reanimated/mock'));
+// De officiële mock heeft geen useReducedMotion; Odyssey gebruikt die (gloed, oog, lichtstroom).
+jest.mock('react-native-reanimated', () => {
+  const mock = require('react-native-reanimated/mock');
+  return { ...mock, default: mock.default ?? mock, useReducedMotion: () => false };
+});
 // Taal van de gsm: standaard Nederlands in de tests; een testbestand kan dit overschrijven met jest.mock.
 jest.mock('expo-localization', () => ({ getLocales: () => [{ languageCode: 'nl', languageTag: 'nl-BE' }] }));
 jest.mock('react-native-android-widget', () => {

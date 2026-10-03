@@ -155,6 +155,63 @@ describe('meldingen van de Pi', () => {
     // Geen dubbele melding bij de volgende controle.
     await checkNow();
     expect(siteCalls()).toHaveLength(2);
+    // Eén melding per probleem per server: een nieuwe vervangt de oude in de balk.
+    expect(new Set(siteCalls().map((c) => c[0].identifier)).size).toBe(2);
+    expect(siteCalls()[0][0].identifier).toMatch(/\|site:x\.example\.com$/);
+  });
+
+  test('flapperen: opgelost haalt de melding weg, terugkomen binnen 6 uur geeft geen nieuwe', () => {
+    const { resolvedKeys, throttle, RENOTIFY_MS } = require('@/background/alerts') as typeof import('@/background/alerts');
+    const down = (id: number) => ev(id, 'site', { key: 'site:news.example.com', level: 'critical' });
+    const up = (id: number) => ev(id, 'site', { key: 'site:news.example.com', level: 'ok', resolved: true });
+    expect(resolvedKeys([down(3), up(4)], 2)).toEqual(['site:news.example.com']);
+    expect(resolvedKeys([up(4), down(5)], 2)).toEqual([]); // weer open: melding laten staan
+    const first = throttle([down(5)], {}, 1000);
+    expect(first.show).toHaveLength(1);
+    expect(throttle([down(7)], first.notifiedAt, 1000 + 20 * 60_000).show).toHaveLength(0);
+    expect(throttle([down(9)], first.notifiedAt, 1000 + RENOTIFY_MS + 1).show).toHaveLength(1);
+    // Twee keer dezelfde sleutel in één controle: één melding.
+    expect(throttle([down(10), down(11)], {}, 5).show).toHaveLength(1);
+  });
+
+  test('veel nieuwe problemen tegelijk: één samenvatting', async () => {
+    let checkNow!: typeof import('@/background/alerts').checkNow;
+    let settings!: typeof import('@/state/settings');
+    let sched!: jest.Mock;
+    jest.isolateModules(() => {
+      settings = require('@/state/settings');
+      const alerts = require('@/background/alerts');
+      checkNow = alerts.checkNow;
+      let saved = {};
+      alerts.alertStateIO.load = () => JSON.parse(JSON.stringify(saved));
+      alerts.alertStateIO.save = (v: object) => {
+        saved = v;
+      };
+      sched = require('expo-notifications').scheduleNotificationAsync;
+    });
+    await settings.wipeAll();
+    await settings.addServer(PI_A);
+    await settings.savePrefs({ onboarded: true });
+    let lastId = 1;
+    (globalThis as unknown as { fetch: jest.Mock }).fetch = jest.fn((url: string) => {
+      const u = new URL(url);
+      if (u.pathname === '/v1/overview') return respond(FX['/v1/overview']);
+      if (u.pathname === '/v1/events') {
+        const events = lastId > 1 ? [2, 3, 4, 5, 6].map((i) => ({ id: i, ts: 1, level: 'critical', kind: 'site', key: `site:s${i}.example.com`, resolved: false, title: `s${i}.example.com is onbereikbaar`, body: 'HTTP 502' })) : [];
+        return respond({ last_id: lastId, open: events.length, events });
+      }
+      if (u.pathname === '/v1/agent/update') return respond({ update_available: false, latest: '1.2.0' });
+      return respond({ code: 'not_found', message: 'nf' }, 404);
+    });
+    await checkNow();
+    sched.mockClear();
+    lastId = 6;
+    await checkNow();
+    const calls = sched.mock.calls.filter((c) => String(c[0].content.title).includes('nieuwe problemen'));
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0].content.title).toBe('garage: 5 nieuwe problemen');
+    expect(calls[0][0].content.data.url).toBe('/events');
+    expect(sched.mock.calls.filter((c) => String(c[0].content.title).includes('onbereikbaar'))).toHaveLength(0);
   });
 });
 
@@ -172,6 +229,31 @@ describe('schermen 1.2', () => {
     expect(screen.getByText('5 update(s) klaar')).toBeTruthy();
     expect(screen.getByText('2 beveiliging')).toBeTruthy();
     expect(await screen.findByText(/^Bijwerken naar /)).toBeTruthy();
+  });
+
+  test('Updates: een achtergehouden pakket telt niet als klaar en wordt uitgelegd', async () => {
+    const upd = FX['/v1/updates'] as Record<string, unknown>;
+    const held = {
+      ...upd, count: 0, held_count: 1, security_count: 0, full_upgrade_removes: ['oud-pakket'],
+      packages: [{ name: 'rpd-common', from: '1.31', to: '1.32', security: false, held: true, reason: 'removal' }],
+    };
+    const prev = (globalThis as unknown as { fetch: jest.Mock }).fetch;
+    (globalThis as unknown as { fetch: jest.Mock }).fetch = jest.fn((url: string) =>
+      new URL(url).pathname === '/v1/updates' ? respond(held) : prev(url));
+    (require('@/api/cache') as typeof import('@/api/cache')).cacheClear(); // geen offline-kopie van de vorige test
+    await renderScreen(require('@/app/updates').default);
+    expect(await screen.findByText('rpd-common')).toBeTruthy();
+    expect(screen.getByText('Alles is up-to-date')).toBeTruthy();
+    expect(screen.getByText(/1 achtergehouden/)).toBeTruthy();
+    expect(screen.getByText(/oud-pakket te verwijderen/)).toBeTruthy();
+    (globalThis as unknown as { fetch: jest.Mock }).fetch = prev;
+  });
+
+  test('Overzicht: meldingen-knop met teller', async () => {
+    const { AlertsButton } = require('@/components/layout') as typeof import('@/components/layout');
+    await renderScreen(AlertsButton);
+    expect(await screen.findByLabelText('Meldingen: 5 open')).toBeTruthy();
+    expect(screen.getByText('5')).toBeTruthy();
   });
 
   test('Meldingen toont de gebeurtenissen van de Pi', async () => {

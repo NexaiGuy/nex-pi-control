@@ -1,5 +1,16 @@
-# Public hostnames to check. On first install setup.sh fills this from /etc/cloudflared/*.yml (read-only).
-# Add "path" for a specific health check URL, and "local" for the origin behind it.
+# Public hostnames to check.
+#
+# The agent finds hostnames itself: hal-sites-discover (a read-only timer, every 10 minutes) reads the
+# ingress rules of every cloudflared config (/etc/cloudflared, ~/.cloudflared, the --config of each
+# cloudflared unit and cloudflared containers). New sites show up in the app without editing this file.
+# cloudflared itself is never changed.
+#
+# Here you only add what discovery cannot see (tunnels managed in the Cloudflare dashboard with a token),
+# set a health check path, or hide a hostname.
+discover: true          # false = only the list below
+discover_nginx: false   # true = also nginx server_name entries
+exclude: []             # hostnames to hide, e.g. [old.example.com]
 sites: []
 #  - hostname: home.example.com
 #    local: http://127.0.0.1:8123
+#    path: /health

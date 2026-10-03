@@ -67,7 +67,7 @@ Connection guides: [Tailscale](../docs/connect-tailscale.md), [home network](../
 | `sensors.yml` | DS18B20, DHT (kernel driver), BMP280 |
 | `wol.yml` | Wake-on-LAN devices |
 | `shell-roots.yml` | folders for the file manager (read only or read write) |
-| `sites.yml` | hostnames to check (filled from your cloudflared config on first install, if present) |
+| `sites.yml` | extra hostnames, health check paths and `exclude`. Hostnames from your cloudflared configs are found automatically every 10 minutes by `hal-sites-discover` (read only) |
 | `ports.md` | port registry shown in the app |
 
 The agent reloads `sensors.yml`, `sites.yml`, `gpio.yml` and `wol.yml` automatically. For `allowed-actions.yml` and `commands.yml` run `hal-apply-config`, because those also regenerate the polkit rule.

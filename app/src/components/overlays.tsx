@@ -11,9 +11,16 @@ import Svg, { Circle } from 'react-native-svg';
 import { ApiError } from '@/api/client';
 import { locale, t } from '@/i18n';
 import { createStore, useStore } from '@/state/store';
-import { colors, fonts, radius, space, themed, touch } from '@/theme/tokens';
+import { colors, easing, fonts, isOdyssey, motion, radius, space, themed, touch } from '@/theme/tokens';
 
 import { Button, Icon, T, type IconName } from './primitives';
+
+// Odyssey: geen veer, geen doorschieten. Rustig naar binnen over dur-sheet met ease-axis.
+function settle(spring: { damping: number; stiffness?: number; mass?: number }) {
+  return isOdyssey()
+    ? withTiming(0, { duration: motion.sheet, easing: Easing.bezier(easing.axis[0], easing.axis[1], easing.axis[2], easing.axis[3]) })
+    : withSpring(0, spring);
+}
 
 // ---------- Sheet ----------------------------------------------------------------------
 
@@ -32,7 +39,7 @@ export function Sheet({ visible, onClose, title, children, scroll = true }: { vi
   useEffect(() => {
     if (visible) {
       y.set(height);
-      y.set(withSpring(0, { damping: 22, stiffness: 220, mass: 0.9 }));
+      y.set(settle({ damping: 22, stiffness: 220, mass: 0.9 }));
     } else {
       y.set(
         withTiming(height, { duration: 200, easing: Easing.in(Easing.cubic) }, (done) => {
@@ -53,7 +60,7 @@ export function Sheet({ visible, onClose, title, children, scroll = true }: { vi
         },
         onPanResponderRelease: (_e, g) => {
           if (g.dy > 120 || g.vy > 1.2) closeRef.current();
-          else y.set(withSpring(0, { damping: 22, stiffness: 220 }));
+          else y.set(settle({ damping: 22, stiffness: 220 }));
         },
       }),
     [y],
@@ -259,7 +266,7 @@ function ToastItem({ item }: { item: Toast }) {
   const y = useSharedValue(30);
   const o = useSharedValue(0);
   useEffect(() => {
-    y.set(withSpring(0, { damping: 18 }));
+    y.set(settle({ damping: 18 }));
     o.set(withTiming(1, { duration: 160 }));
   }, [o, y]);
   const style = useAnimatedStyle(() => ({ transform: [{ translateY: y.get() }], opacity: o.get() }));
@@ -385,7 +392,7 @@ const ov = themed(() => StyleSheet.create({
     borderTopRightRadius: radius.xl, borderWidth: 1, borderColor: colors.line,
   },
   handleZone: { alignItems: 'center', paddingTop: space.sm, paddingBottom: space.md, paddingHorizontal: space.lg },
-  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.lineStrong },
+  handle: isOdyssey() ? { width: 32, height: 2, borderRadius: 1, backgroundColor: colors.lineStrong } : { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.lineStrong },
   effect: { flexDirection: 'row', gap: space.md, padding: space.lg, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface2 },
   hold: {
     minHeight: 60, borderRadius: radius.md, borderWidth: 1.5, flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, overflow: 'hidden',

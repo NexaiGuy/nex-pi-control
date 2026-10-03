@@ -8,7 +8,7 @@ import { ApiError, api } from './client';
 import type {
   ActionResult, AgentUpdateState, AuditEntry, Backup, Command, CommandResult, ContainerRestartResult, ContainersResponse, DeviceInfo, Disks,
   EventsResponse, GpioState, Info, LogLine, MetricMeta, Overview, Ports, Process, RangeKey, Series, SensorsResponse, Service, ShellState,
-  Site, UpdatesState, WolDevice,
+  SitesResponse, UpdatesState, WolDevice,
 } from './types';
 import { createStore } from '@/state/store';
 
@@ -117,7 +117,7 @@ export const useServiceLogs = (name: string, live: boolean) =>
 export const useContainers = () => useCached<ContainersResponse>(qk.containers, () => api.get('/v1/containers'), 30000);
 export const useContainerLogs = (id: string) =>
   useCached<{ lines: string[] }>(qk.containerLogs(id), () => api.get(`/v1/containers/${encodeURIComponent(id)}/logs`, { lines: 100 }), false);
-export const useSites = () => useCached<{ sites: Site[]; updated_at: number | null }>(qk.sites, () => api.get('/v1/sites'), 30000);
+export const useSites = () => useCached<SitesResponse>(qk.sites, () => api.get('/v1/sites'), 30000);
 export const useProcesses = (sort: string) => useCached<Process[]>(qk.processes(sort), () => api.get('/v1/processes', { sort, limit: 60 }), 5000);
 export const useBackups = () => useCached<Backup[]>(qk.backups, () => api.get('/v1/backups'), 60000);
 export const usePorts = () => useCached<Ports>(qk.ports, () => api.get('/v1/ports'), 60000);
