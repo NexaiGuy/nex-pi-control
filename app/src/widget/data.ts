@@ -5,7 +5,8 @@ import { api, request } from '@/api/client';
 import type {
   AgentEvent, Backup, Container, ContainersResponse, DeviceInfo, EventsResponse, Info, Overview, Point, Series, Site, SitesResponse, UpdatesState,
 } from '@/api/types';
-import { connectionStore, hydrate, hydratedStore, isConfigured, serverName, serversStore, type Server } from '@/state/settings';
+import { connectionStore, hydrate, hydratedStore, isConfigured, prefsStore, serverName, serversStore, type Server } from '@/state/settings';
+import type { ThemePref } from '@/theme/tokens';
 
 export type Need = 'cpu1h' | 'net24' | 'sites' | 'containers' | 'backups' | 'events' | 'updates' | 'device' | 'info' | 'fleet';
 
@@ -51,7 +52,23 @@ export interface Snapshot {
   updatedAt: number | null;
   offline: boolean;
   extras: Extras;
+  /** Thema uit de app: 'system' volgt Android, 'dark' of 'light' zet de widget vast in dat thema. */
+  theme?: ThemePref;
 }
+
+/** Het thema dat de gebruiker in de app koos (Instellingen > Weergave). */
+export function widgetTheme(): ThemePref {
+  const t = prefsStore.get().theme;
+  return t === 'dark' || t === 'light' ? t : 'system';
+}
+
+/** Zorgt dat voorkeuren en verbinding geladen zijn (de widgettaak start zonder de app). */
+export async function ensureHydrated(): Promise<void> {
+  if (!hydratedStore.get()) await hydrate();
+}
+
+/** Een laatste toestand uit de cache telt als offline zodra ze ouder is dan twee verversingen (2 x 30 min) plus marge. */
+const STALE_MS = 65 * 60 * 1000;
 
 // Dezelfde cachesleutels als de app (JSON van de query-key), zodat widget en app elkaars laatste toestand delen.
 const K = {
@@ -212,7 +229,11 @@ export interface LoadOptions {
 }
 
 export async function loadSnapshot(needs: readonly Need[], opts: LoadOptions = {}): Promise<Snapshot> {
-  if (!hydratedStore.get()) await hydrate();
+  await ensureHydrated();
+  return { ...(await loadData(needs, opts)), theme: widgetTheme() };
+}
+
+async function loadData(needs: readonly Need[], opts: LoadOptions): Promise<Snapshot> {
   const conn = connectionStore.get();
   if (!isConfigured(conn)) {
     // Een vergrendelde gsm geeft de verbinding soms niet vrij aan de achtergrondtaak. Is er al een laatste
@@ -241,7 +262,8 @@ export async function loadSnapshot(needs: readonly Need[], opts: LoadOptions = {
       const c = cacheGet<Overview>(key(K.overview));
       overview = c?.data ?? null;
       updatedAt = c?.at ?? null;
-      offline = true;
+      // Netwerk mislukt: offline. Enkel de cache gelezen (vanuit de app): offline pas als die te oud is.
+      offline = !opts.cacheOnly || !c || Date.now() - c.at > STALE_MS;
     }
   }
   const extras = await loadExtras(needs, Boolean(opts.cacheOnly) || offline, offline ? null : overview);
@@ -250,5 +272,5 @@ export async function loadSnapshot(needs: readonly Need[], opts: LoadOptions = {
 
 /** De eerste weergave terwijl de gegevens nog laden: haarlijnen, geen getallen. */
 export function loadingSnapshot(): Snapshot {
-  return { configured: true, loading: true, server: '', overview: null, updatedAt: null, offline: false, extras: {} };
+  return { configured: true, loading: true, server: '', overview: null, updatedAt: null, offline: false, extras: {}, theme: widgetTheme() };
 }

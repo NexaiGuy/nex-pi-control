@@ -61,8 +61,14 @@ export function makeCtx(kind: WidgetKind, snap: Snapshot, pal: Pal, size?: { wid
   return { pal, s: copy, fs, big: fs > 1.15, w, h, snap, o, lv, off: lv === 'offline', problem: lv === 'warning' || lv === 'critical', alarm };
 }
 
-/** Licht en donker: Android kiest volgens het systeemthema. De widgets zijn altijd Odyssey. */
+/**
+ * Het thema volgt de keuze in de app (Instellingen > Weergave): Systeem laat Android kiezen tussen licht en donker,
+ * Licht of Donker zet elke widget vast in dat thema, ook als de gsm zelf anders staat. De widgets zijn altijd Odyssey.
+ */
 export function renderWidget(def: WidgetDef, snap: Snapshot, info?: Pick<WidgetInfo, 'width' | 'height'>): WidgetRepresentation {
+  const theme = snap.theme ?? 'system';
+  if (theme === 'light') return renderKind(def.kind, makeCtx(def.kind, snap, LIGHT, info));
+  if (theme === 'dark') return renderKind(def.kind, makeCtx(def.kind, snap, DARK, info));
   return {
     light: renderKind(def.kind, makeCtx(def.kind, snap, LIGHT, info)),
     dark: renderKind(def.kind, makeCtx(def.kind, snap, DARK, info)),

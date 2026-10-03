@@ -174,3 +174,61 @@ describe('volledige lijsten', () => {
     expect(listOf('disks', {}, { ...okOverview, mounts })?.children).toHaveLength(6);
   });
 });
+
+describe('thema volgt de app', () => {
+  type Node = { type: string; props: Record<string, unknown>; children?: Node[] };
+  const def = WIDGETS.find((w) => w.kind === 'overview')!;
+  const json = (el: unknown) => JSON.stringify(buildWidgetTree(el) as Node);
+
+  test('Licht in de app: elke widget licht, ook als de gsm donker staat', () => {
+    const r = renderWidget(def, snap({ theme: 'light' })) as { light?: unknown };
+    expect(r.light).toBeUndefined();
+    expect(json(r)).toContain('#F4F4F1');
+    expect(json(r)).not.toContain('#050508"');
+  });
+
+  test('Donker in de app: elke widget donker', () => {
+    const r = renderWidget(def, snap({ theme: 'dark' })) as { light?: unknown };
+    expect(r.light).toBeUndefined();
+    expect(json(r)).toContain('#0B0B12');
+    expect(json(r)).not.toContain('#F4F4F1');
+  });
+
+  test('Systeem: Android kiest tussen een lichte en een donkere versie', () => {
+    const r = renderWidget(def, snap({ theme: 'system' })) as { light: unknown; dark: unknown };
+    expect(json(r.light)).toContain('#F4F4F1');
+    expect(json(r.dark)).toContain('#0B0B12');
+    // Zonder thema (oude snapshot) hetzelfde gedrag.
+    expect((renderWidget(def, snap()) as { light: unknown }).light).toBeTruthy();
+  });
+
+  test('widgetTheme leest de keuze uit Instellingen', () => {
+    const { prefsStore } = require('@/state/settings') as typeof import('@/state/settings');
+    const { widgetTheme } = require('@/widget/data') as typeof import('@/widget/data');
+    const before = prefsStore.get();
+    prefsStore.set({ ...before, theme: 'light' });
+    expect(widgetTheme()).toBe('light');
+    prefsStore.set({ ...before, theme: 'system' });
+    expect(widgetTheme()).toBe('system');
+    prefsStore.set(before);
+  });
+});
+
+describe('cache vanuit de app', () => {
+  test('een verse cache telt niet als offline, een oude wel', async () => {
+    const settings = require('@/state/settings') as typeof import('@/state/settings');
+    const { cacheSet } = require('@/api/cache') as typeof import('@/api/cache');
+    const { loadSnapshot } = require('@/widget/data') as typeof import('@/widget/data');
+    settings.hydratedStore.set(true);
+    settings.connectionStore.set({ ...settings.DEFAULT_CONNECTION, name: 'hal-9000', apiUrl: 'https://pi.example.com', agentToken: 'a'.repeat(48) });
+    cacheSet(JSON.stringify(['overview']), okOverview);
+    const fresh = await loadSnapshot([], { cacheOnly: true });
+    expect(fresh.overview).toBeTruthy();
+    expect(fresh.offline).toBe(false);
+    const now = Date.now();
+    const spy = jest.spyOn(Date, 'now').mockReturnValue(now + 2 * 3600 * 1000);
+    const old = await loadSnapshot([], { cacheOnly: true });
+    expect(old.offline).toBe(true);
+    spy.mockRestore();
+  });
+});
