@@ -1,0 +1,20 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'be.nexai.floatingpi'
+version = '1.0.0'
+
+android {
+  namespace "be.nexai.floatingpi"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  // BankAppsTest (src/test): legt vast voor welke bank-apps de zwevende bubbel wijkt. Enkel voor unit-tests op de JVM.
+  testImplementation 'junit:junit:4.13.2'
+}

@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- De service, de opstart-ontvanger en de rechten komen uit plugins/withWidgetLive.js, zodat ze per build aan of uit kunnen. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

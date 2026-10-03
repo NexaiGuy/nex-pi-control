@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Geest-effect vanuit het zwevende icoon (positie 30% breed, 10% hoog). Gegenereerd, zie FloatingPiService.openApp(). -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shareInterpolator="false"
+    android:zAdjustment="top">
+  <alpha
+      android:fromAlpha="0.0"
+      android:toAlpha="1.0"
+      android:duration="140"
+      android:interpolator="@android:anim/decelerate_interpolator" />
+  <!-- 1. De straal: heel smal, schiet in de hoogte uit het icoon. -->
+  <scale
+      android:fromXScale="0.22"
+      android:toXScale="1.0"
+      android:fromYScale="0.03"
+      android:toYScale="1.0"
+      android:pivotX="30%"
+      android:pivotY="10%"
+      android:duration="300"
+      android:interpolator="@android:anim/decelerate_interpolator" />
+  <!-- 2. Openvouwen in de breedte, met een lichte veer. -->
+  <scale
+      android:fromXScale="0.18"
+      android:toXScale="1.0"
+      android:fromYScale="1.0"
+      android:toYScale="1.0"
+      android:pivotX="30%"
+      android:pivotY="10%"
+      android:startOffset="110"
+      android:duration="360"
+      android:interpolator="@android:anim/overshoot_interpolator" />
+</set>

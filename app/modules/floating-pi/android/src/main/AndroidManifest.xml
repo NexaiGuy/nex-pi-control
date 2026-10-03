@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- De service en de rechten komen uit plugins/withFloatingIcon.js, zodat ze per build aan of uit kunnen (Play Store). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

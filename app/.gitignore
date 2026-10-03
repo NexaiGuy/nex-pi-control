@@ -9,3 +9,9 @@ keys/
 .env
 .env.*
 npm-debug.*
+
+# Native code van de lokale Expo-modules hoort in git, enkel de build-uitvoer niet
+!modules/*/android/
+modules/*/android/build/
+modules/*/android/.gradle/
+modules/*/android/.cxx/
