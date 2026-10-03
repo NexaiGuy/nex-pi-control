@@ -63,11 +63,14 @@ jest.mock('react-native-reanimated', () => {
 // Taal van de gsm: standaard Nederlands in de tests; een testbestand kan dit overschrijven met jest.mock.
 jest.mock('expo-localization', () => ({ getLocales: () => [{ languageCode: 'nl', languageTag: 'nl-BE' }] }));
 jest.mock('react-native-android-widget', () => {
-  const React = require('react');
-  const el = (name) => (props) => React.createElement(name, props, props.children);
+  // De bouwstenen zijn puur JS; enkel de native module ontbreekt in Jest.
+  const w = (n) => jest.requireActual(`react-native-android-widget/lib/commonjs/widgets/${n}`)[n];
   return {
-    FlexWidget: el('FlexWidget'),
-    TextWidget: el('TextWidget'),
+    FlexWidget: w('FlexWidget'),
+    TextWidget: w('TextWidget'),
+    SvgWidget: w('SvgWidget'),
+    OverlapWidget: w('OverlapWidget'),
+    ListWidget: w('ListWidget'),
     requestWidgetUpdate: jest.fn(async () => {}),
     registerWidgetTaskHandler: jest.fn(),
   };

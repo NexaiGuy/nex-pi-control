@@ -11,8 +11,6 @@ import { eventEnabled, newEvents } from '@/background/alerts';
 import {
   DEFAULT_CONNECTION, DEFAULT_PREFS, addServer, connectionStore, hydrate, hydratedStore, prefsStore, removeServer, serversStore, switchServer, wipeAll,
 } from '@/state/settings';
-import { toWidgetData } from '@/widget/data';
-import { StatusWidget } from '@/widget/StatusWidget';
 
 const FX = fixtures as Record<string, unknown>;
 const PI_A = { ...DEFAULT_CONNECTION, name: 'garage', apiUrl: 'https://a.example.com', agentToken: 'a'.repeat(48) };
@@ -275,21 +273,6 @@ describe('schermen 1.2', () => {
   });
 });
 
-describe('widget', () => {
-  test('gegevens uit het overzicht', () => {
-    const o = FX['/v1/overview'] as Overview;
-    const d = toWidgetData(o, 'homelab-pi', 1000, false);
-    expect(d.status).toBe('critical');
-    expect(d.disk).toBe(o.mounts.find((m) => m.mountpoint === '/')!.percent);
-    expect(toWidgetData(null, 'x', null, true).status).toBe('unknown');
-  });
-
-  test('licht en donker', () => {
-    const w = StatusWidget({ data: toWidgetData(FX['/v1/overview'] as Overview, 'homelab-pi', Date.now(), false) });
-    expect(w.light).toBeTruthy();
-    expect(w.dark).toBeTruthy();
-  });
-});
 
 describe('demo', () => {
   test('container herstarten, updates en agent-update in de demo', async () => {

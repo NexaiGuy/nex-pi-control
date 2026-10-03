@@ -11,7 +11,6 @@ import { connectionStore, DEFAULT_CONNECTION, DEFAULT_PREFS, hydrate, prefsStore
 import {
   applyTheme, colors, DEFAULT_DESIGN, fonts, getDesign, getTheme, levelColor, radius, resolveDesign, resolveTheme, series, themed, type,
 } from '@/theme/tokens';
-import { StatusWidget, type WidgetData } from '@/widget/StatusWidget';
 
 const FX = fixtures as Record<string, unknown>;
 
@@ -225,13 +224,3 @@ describe('schermen in Odyssey', () => {
   });
 });
 
-describe('widget volgt het design', () => {
-  const data: WidgetData = { server: 'hal-9000', status: 'critical', title: 'Schijf faalt', temp: 51, cpu: 12, disk: 40, updatedAt: Date.now(), offline: false };
-  const name = (el: unknown) => ((el as { type: { name: string } }).type.name);
-
-  test('standaard Odyssey, klassiek op verzoek', () => {
-    expect(name(StatusWidget({ data }).dark)).toBe('OdyBody');
-    expect(name(StatusWidget({ data: { ...data, design: 'odyssey' } }).light)).toBe('OdyBody');
-    expect(name(StatusWidget({ data: { ...data, design: 'classic' } }).dark)).toBe('Body');
-  });
-});
