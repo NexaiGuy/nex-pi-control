@@ -527,6 +527,21 @@ export const nl = {
     needsAgent: (v: string) => `Deze functie heeft agent 1.2.0 of nieuwer nodig. Jouw Pi draait ${v}. Werk één keer bij met het installatiecommando, daarna kan het vanuit de app.`,
     manualUpdate: 'Bijwerken via SSH',
   },
+  widgetLive: {
+    title: 'Live widgets',
+    toggle: 'Widgets live bijwerken',
+    interval: 'Verversen elke',
+    every: (s: number) => (s < 60 ? `${s} s` : `${Math.round(s / 60)} min`),
+    usageNeeded: 'Met "Toegang tot gebruiksgegevens" ververst de app enkel als je startscherm vooraan staat. Zonder die toegang ververst hij zolang je gsm ontgrendeld is, ook als je in een andere app zit.',
+    usageButton: 'Toegang geven',
+    note: 'Je widgets tonen de toestand van je Pi van dit moment zodra je ernaar kijkt: meteen bij het ontgrendelen en bij elke terugkeer naar je startscherm, daarna elke gekozen tijd. Scherm uit of vergrendeld: niets, geen netwerk en geen batterijverbruik. Android vraagt hiervoor een stille melding. Staat dit uit, dan verversen de widgets enkel om de 30 minuten en wanneer je de app opent.',
+    noWidgets: 'Er staat nog geen widget van Nex Pi Control op je startscherm. Hou je startscherm ingedrukt, kies Widgets en zoek Nex Pi Control.',
+    status: (running: boolean, widgets: number, last: string | null, home: boolean | null) =>
+      `Dienst: ${running ? 'actief' : 'uit'} · widgets: ${widgets}${last ? ` · laatst ververst: ${last}` : ''}${home === null ? '' : home ? ' · startscherm vooraan' : ' · andere app vooraan'}`,
+    notifText: (s: number) => `Widgets live · elke ${s < 60 ? `${s} s` : `${Math.round(s / 60)} min`}`,
+    stop: 'Uitzetten',
+    channel: 'Live widgets',
+  },
   floating: {
     status: (running: boolean, draw: boolean, usage: boolean, fg: string | null, home: boolean | null, bank = false) =>
       `Dienst: ${running ? 'actief' : 'uit'} · zweven: ${draw ? 'ok' : 'geen toestemming'} · gebruiksgegevens: ${usage ? 'ok' : 'geen toegang'}${fg ? ` · vooraan: ${fg}${bank ? ' (bank-app: venster weg)' : home === null ? '' : home ? ' (startscherm)' : ' (andere app)'}` : ''}`,

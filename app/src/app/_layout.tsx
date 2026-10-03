@@ -23,6 +23,7 @@ import { LockGate } from '@/features/lock/LockGate';
 import { connectionStore, hydrate, hydratedStore, isConfigured, prefsStore, serversStore } from '@/state/settings';
 import { useStore } from '@/state/store';
 import { floatingPi, syncFloatingPi } from '@/lib/floatingPi';
+import { syncWidgetLive } from '@/lib/widgetLive';
 import { setThemeReturn, takeThemeReturn } from '@/lib/themeReturn';
 import { applyTheme, colors, resolveDesign, resolveTheme } from '@/theme/tokens';
 
@@ -35,7 +36,11 @@ focusManager.setEventListener((handleFocus) => {
     // Het zwevende icoon verdwijnt zolang de app zelf op het scherm staat (de native kant doet dit ook, dit is de reserve).
     floatingPi.setAppVisible(state === 'active');
     // Weer in de app: was het icoon tijdelijk verborgen (kruis of melding), dan komt het nu terug.
-    if (state === 'active') syncFloatingPi();
+    if (state === 'active') {
+      syncFloatingPi();
+      // Live widgets: (opnieuw) starten als ze aan staan, na een herstart van Android of een weigering op de achtergrond.
+      syncWidgetLive();
+    }
   });
   return () => sub.remove();
 });
@@ -125,6 +130,7 @@ export default function RootLayout() {
         if (Platform.OS === 'android') {
           void registerBackgroundAlerts();
           syncFloatingPi();
+          syncWidgetLive();
         }
       }
     }

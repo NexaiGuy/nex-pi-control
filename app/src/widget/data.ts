@@ -87,13 +87,45 @@ const key = (k: readonly string[]) => JSON.stringify(k);
 const SERVER_KEY = 'widget.server';
 const TIMEOUT = 9000;
 
-async function get<T>(k: readonly string[], path: string, query: Record<string, string> | undefined, cacheOnly: boolean): Promise<T | undefined> {
+/**
+ * Hoe lang een antwoord vers genoeg is om niet opnieuw te vragen (ms). Live widgets verversen tot elke 30 s en elke
+ * widget draait zijn eigen taak: zo vraagt een volle startpagina het overzicht één keer op, niet één keer per widget.
+ * Trage reeksen (24 uur netwerk, apparaatinfo) vragen we veel minder vaak.
+ */
+export const FRESH_MS = {
+  overview: 15_000,
+  list: 25_000,
+  cpu1h: 55_000,
+  net24: 5 * 60_000,
+  slow: 30 * 60_000,
+} as const;
+
+const inflight = new Map<string, Promise<{ at: number; data: unknown }>>();
+
+/**
+ * Vers van de Pi, tenzij de cache jonger is dan maxAge. Gelijktijdige vragen naar dezelfde sleutel (meerdere widgets
+ * tegelijk) delen één verzoek. Mislukt het, dan gooit dit een fout en valt de beller terug op de cache.
+ */
+export async function fetchShared<T>(ck: string, maxAge: number, fn: () => Promise<T>): Promise<{ at: number; data: T }> {
+  const c = cacheGet<T>(ck);
+  if (c && Date.now() - c.at < maxAge) return c;
+  const running = inflight.get(ck);
+  if (running) return running as Promise<{ at: number; data: T }>;
+  const p = fn()
+    .then((data) => {
+      cacheSet(ck, data);
+      return { at: Date.now(), data };
+    })
+    .finally(() => inflight.delete(ck));
+  inflight.set(ck, p);
+  return p;
+}
+
+async function get<T>(k: readonly string[], path: string, query: Record<string, string> | undefined, cacheOnly: boolean, maxAge: number = FRESH_MS.list): Promise<T | undefined> {
   const ck = key(k);
   if (!cacheOnly) {
     try {
-      const d = await api.get<T>(path, query, { timeoutMs: TIMEOUT });
-      cacheSet(ck, d);
-      return d;
+      return (await fetchShared(ck, maxAge, () => api.get<T>(path, query, { timeoutMs: TIMEOUT }))).data;
     } catch {
       // val terug op de cache
     }
@@ -145,9 +177,8 @@ async function loadFleet(cacheOnly: boolean, current: Overview | null): Promise<
       }
       if (!cacheOnly && isConfigured(s)) {
         try {
-          const o = await request<Overview>('/v1/overview', { conn: s, timeoutMs: TIMEOUT });
-          cacheSet(ck, o);
-          return { id: s.id, name: serverName(s), active, overview: o, offline: false, updatedAt: Date.now() };
+          const r = await fetchShared(ck, FRESH_MS.overview, () => request<Overview>('/v1/overview', { conn: s, timeoutMs: TIMEOUT }));
+          return { id: s.id, name: serverName(s), active, overview: r.data, offline: false, updatedAt: r.at };
         } catch {
           // offline: laatste bekende toestand
         }
@@ -172,9 +203,11 @@ async function loadExtras(needs: readonly Need[], cacheOnly: boolean, current: O
         let s = cached;
         if (!cacheOnly) {
           try {
-            const one = await api.get<Series>('/v1/stats/history', { metric: 'cpu', range: '1h' }, { timeoutMs: TIMEOUT });
-            s = [one];
-            cacheSet(key(K.cpu1h), s);
+            s = (
+              await fetchShared(key(K.cpu1h), FRESH_MS.cpu1h, async () => [
+                await api.get<Series>('/v1/stats/history', { metric: 'cpu', range: '1h' }, { timeoutMs: TIMEOUT }),
+              ])
+            ).data;
           } catch {
             // cache
           }
@@ -189,9 +222,12 @@ async function loadExtras(needs: readonly Need[], cacheOnly: boolean, current: O
         let s = cacheGet<Series[]>(key(K.net24))?.data;
         if (!cacheOnly) {
           try {
-            const r = await api.get<{ series: Series[] }>('/v1/stats/history', { metric: 'net.rx,net.tx', range: '24h' }, { timeoutMs: TIMEOUT });
-            s = r.series;
-            cacheSet(key(K.net24), s);
+            s = (
+              await fetchShared(key(K.net24), FRESH_MS.net24, async () => {
+                const r = await api.get<{ series: Series[] }>('/v1/stats/history', { metric: 'net.rx,net.tx', range: '24h' }, { timeoutMs: TIMEOUT });
+                return r.series;
+              })
+            ).data;
           } catch {
             // cache
           }
@@ -214,8 +250,8 @@ async function loadExtras(needs: readonly Need[], cacheOnly: boolean, current: O
   if (want.has('backups')) jobs.push(get<Backup[]>(K.backups, '/v1/backups', undefined, cacheOnly).then((r) => void (x.backups = r)));
   if (want.has('events')) jobs.push(get<EventsResponse>(K.events, '/v1/events', { limit: '20' }, cacheOnly).then((r) => void (x.events = r?.events)));
   if (want.has('updates')) jobs.push(get<UpdatesState>(K.updates, '/v1/updates', undefined, cacheOnly).then((r) => void (x.updates = r)));
-  if (want.has('device')) jobs.push(get<DeviceInfo>(K.device, '/v1/device', undefined, cacheOnly).then((r) => void (x.device = r)));
-  if (want.has('info')) jobs.push(get<Info>(K.info, '/v1/info', undefined, cacheOnly).then((r) => void (x.agentVersion = r?.version)));
+  if (want.has('device')) jobs.push(get<DeviceInfo>(K.device, '/v1/device', undefined, cacheOnly, FRESH_MS.slow).then((r) => void (x.device = r)));
+  if (want.has('info')) jobs.push(get<Info>(K.info, '/v1/info', undefined, cacheOnly, FRESH_MS.slow).then((r) => void (x.agentVersion = r?.version)));
   if (want.has('fleet')) jobs.push(loadFleet(cacheOnly, current).then((r) => void (x.fleet = r)));
   await Promise.all(jobs.map((j) => j.catch(() => undefined)));
   return x;
@@ -251,9 +287,9 @@ async function loadData(needs: readonly Need[], opts: LoadOptions): Promise<Snap
   if (!overview) {
     if (!opts.cacheOnly) {
       try {
-        overview = await api.get<Overview>('/v1/overview', undefined, { timeoutMs: 12000 });
-        cacheSet(key(K.overview), overview);
-        updatedAt = Date.now();
+        const r = await fetchShared(key(K.overview), FRESH_MS.overview, () => api.get<Overview>('/v1/overview', undefined, { timeoutMs: 12000 }));
+        overview = r.data;
+        updatedAt = r.at;
       } catch {
         offline = true;
       }

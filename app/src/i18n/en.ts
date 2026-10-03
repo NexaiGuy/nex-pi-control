@@ -528,6 +528,21 @@ export const en: Strings = {
     needsAgent: (v: string) => `This needs agent 1.2.0 or newer. Your Pi runs ${v}. Update once with the install command, after that it works from the app.`,
     manualUpdate: 'Update over SSH',
   },
+  widgetLive: {
+    title: 'Live widgets',
+    toggle: 'Keep widgets live',
+    interval: 'Refresh every',
+    every: (s: number) => (s < 60 ? `${s} s` : `${Math.round(s / 60)} min`),
+    usageNeeded: 'With "Usage access" the app only refreshes while your home screen is in front. Without it, it refreshes while your phone is unlocked, also when you are in another app.',
+    usageButton: 'Grant access',
+    note: 'Your widgets show the state of your Pi right now as soon as you look at them: straight away when you unlock and every time you return to your home screen, then at the interval you pick. Screen off or locked: nothing, no network and no battery use. Android needs a silent notification for this. With this off, widgets only refresh every 30 minutes and when you open the app.',
+    noWidgets: 'There is no Nex Pi Control widget on your home screen yet. Long-press your home screen, choose Widgets and look for Nex Pi Control.',
+    status: (running: boolean, widgets: number, last: string | null, home: boolean | null) =>
+      `Service: ${running ? 'running' : 'off'} · widgets: ${widgets}${last ? ` · last refresh: ${last}` : ''}${home === null ? '' : home ? ' · home screen in front' : ' · other app in front'}`,
+    notifText: (s: number) => `Widgets live · every ${s < 60 ? `${s} s` : `${Math.round(s / 60)} min`}`,
+    stop: 'Turn off',
+    channel: 'Live widgets',
+  },
   floating: {
     status: (running: boolean, draw: boolean, usage: boolean, fg: string | null, home: boolean | null, bank = false) =>
       `Service: ${running ? 'running' : 'off'} · overlay: ${draw ? 'ok' : 'no permission'} · usage access: ${usage ? 'ok' : 'none'}${fg ? ` · in front: ${fg}${bank ? ' (bank app: window removed)' : home === null ? '' : home ? ' (home screen)' : ' (other app)'}` : ''}`,

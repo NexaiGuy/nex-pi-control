@@ -3,7 +3,7 @@
     "name": "Nex Pi Control",
     "slug": "nex-pi-control",
     "scheme": "nexpicontrol",
-    "version": "1.3.4",
+    "version": "1.3.5",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -12,7 +12,7 @@
     "newArchEnabled": true,
     "android": {
       "package": "be.nexai.picontrol",
-      "versionCode": 8,
+      "versionCode": 9,
       "adaptiveIcon": {
         "backgroundColor": "#050508",
         "backgroundImage": "./assets/android-icon-background.png",
@@ -88,6 +88,12 @@
       "./plugins/withReleaseSigning",
       [
         "./plugins/withFloatingIcon",
+        {
+          "enabled": true
+        }
+      ],
+      [
+        "./plugins/withWidgetLive",
         {
           "enabled": true
         }

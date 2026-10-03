@@ -50,6 +50,8 @@ export interface Prefs {
    * V2: vroeger zette het kruis het icoon blijvend uit; met een nieuwe sleutel wordt het één keer opnieuw aangezet.
    */
   floatingAskedV2: boolean;
+  /** Live widgets zijn één keer automatisch aangezet (zodra er een widget stond). Daarna beslis je zelf in Instellingen. */
+  widgetLiveAsked: boolean;
 }
 
 export const DEFAULT_CONNECTION: Connection = {
@@ -91,6 +93,7 @@ export const DEFAULT_PREFS: Prefs = {
   theme: 'system',
   design: DEFAULT_DESIGN,
   floatingAskedV2: false,
+  widgetLiveAsked: false,
 };
 
 const KEY_CONN = 'hal.connection.v1'; // oude opslag (één server), wordt bij de eerste start gemigreerd

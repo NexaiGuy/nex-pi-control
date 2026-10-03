@@ -8,7 +8,7 @@ import { AppState, Pressable, Switch, View } from 'react-native';
 import { cacheClear } from '@/api/cache';
 import { DetailScreen } from '@/components/layout';
 import { ConfirmSheet, PromptSheet, Sheet, toast, type ConfirmSpec } from '@/components/overlays';
-import { Button, Card, Chip, Divider, Icon, IconButton, KeyValue, Row, SectionTitle, T } from '@/components/primitives';
+import { Button, Card, Chip, Divider, Icon, IconButton, KeyValue, Row, SectionTitle, Segmented, T } from '@/components/primitives';
 import { authenticate } from '@/features/lock/LockGate';
 import { ConnectionForm } from '@/features/onboarding/ConnectionForm';
 import { QrScanner } from '@/features/onboarding/QrScanner';
@@ -17,6 +17,7 @@ import { ListGroup, ListRow } from '@/components/ListRow';
 import { activateServer } from '@/features/servers/ServerSwitcher';
 import { connectionStore, prefsStore, removeServer, saveConnection, savePrefs, serverName, serversStore, wipeAll, type Connection, type Prefs } from '@/state/settings';
 import { floatingPi } from '@/lib/floatingPi';
+import { LIVE_INTERVALS, widgetLive } from '@/lib/widgetLive';
 import { setThemeReturn } from '@/lib/themeReturn';
 import { useStore } from '@/state/store';
 import { colors, isOdyssey, radius, space, type DesignName, type ThemePref } from '@/theme/tokens';
@@ -115,6 +116,84 @@ function FloatingIconSetting() {
         {status ? (
           <T v="monoSmall" style={{ color: colors.textMuted }}>
             {t.floating.status(status.running, status.canDraw, status.usageAccess, status.foreground ?? null, status.onHome ?? null, status.bank ?? false)}
+          </T>
+        ) : null}
+      </Card>
+    </>
+  );
+}
+
+const two = (n: number) => String(n).padStart(2, '0');
+const clock = (ms: number) => {
+  const d = new Date(ms);
+  return `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`;
+};
+
+/**
+ * Live widgets aan/uit en hoe vaak ze verversen terwijl je naar je startscherm kijkt. Niet zichtbaar in builds zonder
+ * de functie (plugins/withWidgetLive.js met enabled: false) of op iOS.
+ */
+function WidgetLiveSetting() {
+  const [supported] = useState(() => widgetLive.supported());
+  const [on, setOn] = useState(() => widgetLive.enabled());
+  const [interval, setIntervalS] = useState(() => widgetLive.interval());
+  const [status, setStatus] = useState(() => widgetLive.status());
+  useEffect(() => {
+    if (!supported) return undefined;
+    // Statusregel elke 2 s vernieuwen zolang Instellingen open staat.
+    const id = setInterval(() => setStatus(widgetLive.status()), 2000);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        setOn(widgetLive.enabled());
+        setStatus(widgetLive.status());
+      }
+    });
+    return () => {
+      clearInterval(id);
+      sub.remove();
+    };
+  }, [supported]);
+  if (!supported) return null;
+  const toggle = (v: boolean) => {
+    if (v) setOn(widgetLive.start());
+    else {
+      widgetLive.stop();
+      setOn(false);
+    }
+    setStatus(widgetLive.status());
+  };
+  const pick = (k: string) => {
+    const s = Number(k);
+    widgetLive.setInterval(s);
+    setIntervalS(s);
+  };
+  const usage = status?.usageAccess ?? widgetLive.hasUsageAccess();
+  return (
+    <>
+      <SectionTitle>{t.widgetLive.title}</SectionTitle>
+      <Card style={{ gap: space.sm }}>
+        <Toggle label={t.widgetLive.toggle} value={on} onChange={toggle} />
+        {on ? (
+          <>
+            <T v="caption">{t.widgetLive.interval}</T>
+            <Segmented
+              items={LIVE_INTERVALS.map((s) => ({ key: String(s), label: t.widgetLive.every(s) }))}
+              value={String(interval)}
+              onChange={pick}
+            />
+          </>
+        ) : null}
+        {on && !usage && floatingPi.supported() ? (
+          <>
+            <T v="caption">{t.widgetLive.usageNeeded}</T>
+            <Button label={t.widgetLive.usageButton} kind="secondary" icon="eye" onPress={() => floatingPi.openUsageAccess()} />
+          </>
+        ) : null}
+        {on && status && status.widgets < 1 ? <T v="caption">{t.widgetLive.noWidgets}</T> : null}
+        <T v="caption">{t.widgetLive.note}</T>
+        {status ? (
+          <T v="monoSmall" style={{ color: colors.textMuted }}>
+            {t.widgetLive.status(status.running, status.widgets, status.lastRefresh ? clock(status.lastRefresh) : null, status.onHome)}
           </T>
         ) : null}
       </Card>
@@ -272,6 +351,8 @@ export default function SettingsScreen() {
       </Card>
 
       <FloatingIconSetting />
+
+      <WidgetLiveSetting />
 
       <SectionTitle>{t.settings.connection}</SectionTitle>
       <Card style={{ gap: space.md }}>
