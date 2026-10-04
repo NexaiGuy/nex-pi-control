@@ -44,7 +44,8 @@ Everything runs directly between your phone and your own Pi. There is no cloud o
 | **Alerts** | The Pi keeps a log of what goes wrong and recovers (disks, services, containers, sites, security updates). Your phone turns it into notifications, for every Pi you added. No push server |
 | **Updates** | System updates (apt) and the agent itself from the app, with backup and automatic rollback |
 | **Several Pi's** | Add up to 10 servers and switch from the top of every screen |
-| **Widget** | Home screen widget with status, temperature, CPU and disk |
+| **Widgets** | 13 home screen widgets, from a small status eye to a full board, that refresh while you look at them |
+| **Galaxy Z Flip** | A Flex Window widget for the cover screen: the Nex AI logo, a spinning Pi case while it loads, then every metric. Tap it for a full cover screen dashboard (with Good Lock MultiStar) |
 | **Look** | Dark and light theme (follows your phone), English and Dutch |
 | **Security** | Fingerprint lock, tokens in the Android Keystore, screenshots blocked on sensitive screens |
 

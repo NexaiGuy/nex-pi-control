@@ -14,10 +14,10 @@ const SHEET = require('../../assets/pi-case-spin.webp') as number;
 const FRAMES = 120;
 const COLS = 12;
 const ROWS = 10;
-/** Eén volledige draai. */
+/** Eén volledige draai (standaard; het laadscherm van het cover-scherm draait sneller). */
 const PERIOD_MS = 9000;
 
-function PiCaseSpinImpl({ size = 56 }: { size?: number }) {
+function PiCaseSpinImpl({ size = 56, periodMs = PERIOD_MS }: { size?: number; periodMs?: number }) {
   const reduced = useReducedMotion();
   const inView = useScreenInView();
   const p = useSharedValue(0);
@@ -30,9 +30,9 @@ function PiCaseSpinImpl({ size = 56 }: { size?: number }) {
     // Verder vanaf het huidige beeld, zodat pauzeren en hervatten geen sprong geeft.
     const start = Math.floor(p.get()) % FRAMES;
     p.set(start);
-    p.set(withRepeat(withTiming(start + FRAMES, { duration: PERIOD_MS, easing: Easing.linear }), -1, false));
+    p.set(withRepeat(withTiming(start + FRAMES, { duration: periodMs, easing: Easing.linear }), -1, false));
     return () => cancelAnimation(p);
-  }, [reduced, inView, p]);
+  }, [reduced, inView, p, periodMs]);
 
   const sheet = useAnimatedStyle(() => {
     const f = Math.floor(p.get()) % FRAMES;

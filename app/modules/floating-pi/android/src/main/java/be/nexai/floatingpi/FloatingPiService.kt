@@ -338,6 +338,8 @@ class FloatingPiService : Service() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       val ch = NotificationChannel(CHANNEL, label("channel", "Floating icon"), NotificationManager.IMPORTANCE_MIN)
       ch.setShowBadge(false)
+      // Niet op het vergrendelscherm en niet meegeteld op het cover-scherm van de Flip: het is een stille dienstmelding.
+      ch.lockscreenVisibility = Notification.VISIBILITY_SECRET
       nm.createNotificationChannel(ch)
     }
     val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
@@ -356,6 +358,7 @@ class FloatingPiService : Service() {
       .setContentText(label("text", "Floating icon is on"))
       .setOngoing(true)
       .setShowWhen(false)
+      .setVisibility(Notification.VISIBILITY_SECRET)
       .addAction(Notification.Action.Builder(null as Icon?, label("hide", "Hide"), stop).build())
     if (open != null) builder.setContentIntent(open)
     val n = builder.build()

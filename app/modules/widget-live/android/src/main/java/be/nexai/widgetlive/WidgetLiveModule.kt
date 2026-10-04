@@ -37,6 +37,21 @@ class WidgetLiveModule : Module() {
 
     Function("status") { WidgetLiveService.status(context) }
 
+    /** Flex Window: tot wanneer (ms, wandklok) het intro van de cover-widget loopt. 0: geen intro, meteen tekenen. */
+    Function("coverIntroUntil") { CoverScreen.introUntil(context).toDouble() }
+
+    /** Flex Window: de servernaam onder de draaiende behuizing in het laadscherm. */
+    Function("setCoverCaption") { text: String -> CoverScreen.setCaption(context, text) }
+
+    /** Flex Window: het intro meteen tonen (logo, daarna de draaiende behuizing), bv. als de widget net geplaatst is. */
+    Function("playCoverIntro") { CoverScreen.playIntro(context) }
+
+    /** Flex Window: de cijfers tekenen in de native layout (JSON uit src/widget/coverModel.ts). */
+    Function("renderCover") { json: String -> CoverScreen.renderData(context, json) }
+
+    /** Staat de app zelf op het cover-scherm (Good Lock MultiStar)? Dan toont hij het cover-dashboard. */
+    Function("isOnCoverDisplay") { CoverScreen.isActivityOnCover(appContext.currentActivity) }
+
     OnActivityEntersForeground { WidgetLiveService.setAppVisible(true) }
 
     OnActivityEntersBackground { WidgetLiveService.setAppVisible(false) }

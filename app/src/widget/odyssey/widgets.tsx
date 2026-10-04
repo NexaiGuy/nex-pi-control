@@ -7,19 +7,21 @@ import type { AgentEvent, Backup, Container, HealthReason, Mount, Site } from '@
 import type { FleetEntry } from '../data';
 import * as F from './format';
 import {
-  AlarmBand, Bar, BarRow, Diamond, Gap, Grow, Header, KV, Label, Num, Rule, Slab, Space, StatusWord, Txt, alarmText, eyeColor, tap,
+  AlarmBand, Bar, BarRow, Diamond, Gap, Grow, Header, KV, Label, Num, Rule, Slab, Space, StatusWord, Txt, alarmText, ctap, eyeColor,
   timeText, valueColor, type Ctx,
 } from './parts';
 import { band, cores, eye, ring, spark } from './svg';
 
 export type WidgetKind =
   | 'pulse' | 'glance' | 'vitals' | 'strip' | 'overview' | 'command' | 'board'
-  | 'sites' | 'containers' | 'backups' | 'disks' | 'network' | 'fleet';
+  | 'sites' | 'containers' | 'backups' | 'disks' | 'network' | 'fleet' | 'cover';
 
 /** Referentiegrootte per widget in dp (een Pixel met 96 x 100 dp celafstand). */
 export const REF: Record<WidgetKind, [number, number]> = {
   pulse: [88, 92], glance: [184, 92], vitals: [184, 192], strip: [376, 92], overview: [376, 192], command: [376, 292], board: [376, 392],
   sites: [376, 192], containers: [376, 192], backups: [376, 192], disks: [376, 192], network: [376, 192], fleet: [376, 192],
+  // Flex Window van de Galaxy Z Flip: Samsung vraagt minstens 352 x 339 dp.
+  cover: [352, 339],
 };
 
 // --- gedeeld ------------------------------------------------------------------------------------
@@ -28,7 +30,7 @@ function Shell({ c, children, pad = 14, gap = 8 }: { c: Ctx; children: any; pad?
   const gradient = c.pal.bgTop !== c.pal.bgBottom ? { backgroundGradient: { from: c.pal.bgTop, to: c.pal.bgBottom, orientation: 'TOP_BOTTOM' as const } } : { backgroundColor: c.pal.bgBottom };
   return (
     <FlexWidget
-      {...tap('/')}
+      {...ctap(c, '/')}
       style={{ width: 'match_parent', height: 'match_parent', flexDirection: 'column', flexGap: gap, padding: pad, borderRadius: 24, borderWidth: 1, borderColor: c.pal.hairline, ...gradient }}
     >
       {children}
@@ -54,7 +56,7 @@ function MetricsRow({ c, size, gap = 10 }: { c: Ctx; size: number; gap?: number 
   const sys = c.o?.system;
   const r = root(c);
   const col = (label: string, v: string, weight: number, route: string) => (
-    <FlexWidget key={label} {...tap(route)} style={{ flex: weight, flexDirection: 'column', flexGap: 3 }}>
+    <FlexWidget key={label} {...ctap(c, route)} style={{ flex: weight, flexDirection: 'column', flexGap: 3 }}>
       <Label c={c} text={label} />
       <Txt text={v} size={size} color={valueColor(c)} mono />
     </FlexWidget>
@@ -119,7 +121,7 @@ function Reasons({ c, max }: { c: Ctx; max: number }) {
   const more = all.length - shown.length;
   if (!shown.length) return <Gap size={0} />;
   return (
-    <FlexWidget {...tap('/events')} style={{ width: 'match_parent', flexDirection: 'column', flexGap: 3 }}>
+    <FlexWidget {...ctap(c, '/events')} style={{ width: 'match_parent', flexDirection: 'column', flexGap: 3 }}>
       {shown.map((r, i) => (
         <FlexWidget key={`${r.code}${i}`} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', flexGap: 6 }}>
           <Diamond c={c} lv={r.level} size={6} />
@@ -155,7 +157,7 @@ function MountRows({ c, w, max = 3, h = 3 }: { c: Ctx; w: number; max?: number; 
   });
   if (mounts.length > max) rows.push(<Txt key="more" text={c.s.more(mounts.length - max)} size={9} color={c.pal.muted} mono />);
   return (
-    <FlexWidget {...tap('/disks')} style={{ width: 'match_parent', flexDirection: 'column', flexGap: 6 }}>
+    <FlexWidget {...ctap(c, '/disks')} style={{ width: 'match_parent', flexDirection: 'column', flexGap: 6 }}>
       {rows}
     </FlexWidget>
   );
@@ -171,7 +173,7 @@ function CoresRow({ c, withCpu }: { c: Ctx; withCpu: boolean }) {
     <Gap size={0} />
   );
   return (
-    <FlexWidget {...tap('/metric/cpu')} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'flex-end', flexGap: 10 }}>
+    <FlexWidget {...ctap(c, '/metric/cpu')} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'flex-end', flexGap: 10 }}>
       <FlexWidget style={{ flex: 1, flexDirection: 'column', flexGap: 3 }}>
         <Label c={c} text={withCpu ? (freq ? `${c.s.cpu} · ${freq}` : c.s.cpu) : c.s.cores} size={8.5} />
         {withCpu ? <Num c={c} v={F.pct(cpu?.percent)} u="%" size={18} /> : <Txt text={freq || F.NONE} size={10} color={valueColor(c)} mono />}
@@ -189,7 +191,7 @@ function NetLines({ c, w, sh }: { c: Ctx; w: number; sh: number }) {
   const line = (label: string, bps: number | undefined, pts: number[] | undefined, route: string) => {
     const r = F.rate(bps);
     return (
-      <FlexWidget key={label} {...tap(route)} style={{ width: 'match_parent', flexDirection: 'column', flexGap: 2 }}>
+      <FlexWidget key={label} {...ctap(c, route)} style={{ width: 'match_parent', flexDirection: 'column', flexGap: 2 }}>
         <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'flex-end', flexGap: 6 }}>
           <Label c={c} text={label} size={8.5} />
           <Space />
@@ -235,20 +237,20 @@ function Glance(c: Ctx) {
   const compact = c.big || Boolean(c.alarm);
   const body = compact ? (
     <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'flex-end', flexGap: 12 }}>
-      <FlexWidget {...tap('/metric/temp')} style={{ flex: 1 }}>
+      <FlexWidget {...ctap(c, '/metric/temp')} style={{ flex: 1 }}>
         <Num c={c} v={F.temp(sys?.temperature_c)} u="°C" size={22} />
       </FlexWidget>
-      <FlexWidget {...tap('/metric/cpu')}>
+      <FlexWidget {...ctap(c, '/metric/cpu')}>
         <Num c={c} v={F.pct(sys?.cpu.percent, true)} u="%" size={22} />
       </FlexWidget>
     </FlexWidget>
   ) : (
     <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'flex-end', flexGap: 12 }}>
-      <FlexWidget {...tap('/metric/temp')} style={{ flex: 1, flexDirection: 'column', flexGap: 3 }}>
+      <FlexWidget {...ctap(c, '/metric/temp')} style={{ flex: 1, flexDirection: 'column', flexGap: 3 }}>
         <Label c={c} text={c.s.temp} />
         <Num c={c} v={F.temp(sys?.temperature_c)} u="°C" size={22} />
       </FlexWidget>
-      <FlexWidget {...tap('/metric/cpu')} style={{ flex: 1, flexDirection: 'column', flexGap: 3 }}>
+      <FlexWidget {...ctap(c, '/metric/cpu')} style={{ flex: 1, flexDirection: 'column', flexGap: 3 }}>
         <Label c={c} text={c.s.cpu} />
         <Num c={c} v={F.pct(sys?.cpu.percent)} u="%" size={22} />
       </FlexWidget>
@@ -269,7 +271,7 @@ function Vitals(c: Ctx) {
   const rs = c.big || c.h < 180 ? 46 : 52;
   const col = String(c.off ? c.pal.muted : c.pal.purple);
   const cell = (label: string, v: string, pct: number, route: string) => (
-    <FlexWidget key={label} {...tap(route)} style={{ flex: 1, flexDirection: 'column', alignItems: 'center', flexGap: 4 }}>
+    <FlexWidget key={label} {...ctap(c, route)} style={{ flex: 1, flexDirection: 'column', alignItems: 'center', flexGap: 4 }}>
       <OverlapWidget style={{ width: rs, height: rs }}>
         <SvgWidget svg={ring(rs, pct, col, c.pal.line, 3)} style={{ width: rs, height: rs }} />
         <FlexWidget style={{ width: rs, height: rs, alignItems: 'center', justifyContent: 'center' }}>
@@ -299,7 +301,7 @@ function Strip(c: Ctx) {
   const sys = c.o?.system;
   const r = root(c);
   const left = c.alarm ? (
-    <FlexWidget {...tap('/disks')} style={{ flexDirection: 'column', justifyContent: 'center', flexGap: 3, backgroundColor: c.pal.crit, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 6 }}>
+    <FlexWidget {...ctap(c, '/disks')} style={{ flexDirection: 'column', justifyContent: 'center', flexGap: 3, backgroundColor: c.pal.crit, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 6 }}>
       <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 5 }}>
         <Diamond c={c} lv="critical" size={6} color={c.pal.onCrit} />
         <Label c={c} text={c.s.disk} color={c.pal.onCrit} />
@@ -308,13 +310,13 @@ function Strip(c: Ctx) {
       <Txt text={F.clock(c.snap.updatedAt)} size={10} color={c.pal.onCrit} mono />
     </FlexWidget>
   ) : (
-    <FlexWidget {...tap('/')} style={{ flexDirection: 'column', flexGap: 5 }}>
+    <FlexWidget {...ctap(c, '/')} style={{ flexDirection: 'column', flexGap: 5 }}>
       <StatusWord c={c} size={9.5} compact />
       <Txt text={timeText(c, true)} size={10} color={c.pal.muted} mono />
     </FlexWidget>
   );
   const col = (label: string, v: string, weight: number, route: string) => (
-    <FlexWidget key={label} {...tap(route)} style={{ flex: weight, flexDirection: 'column', flexGap: 4 }}>
+    <FlexWidget key={label} {...ctap(c, route)} style={{ flex: weight, flexDirection: 'column', flexGap: 4 }}>
       <Label c={c} text={label} />
       <Txt text={v} size={22} color={valueColor(c)} mono />
     </FlexWidget>
@@ -344,7 +346,7 @@ function Overview(c: Ctx) {
       <SpectralBand c={c} w={w} />
       <MetricsRow c={c} size={26} />
       {showSpark ? (
-        <FlexWidget {...tap('/metric/cpu')} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', flexGap: 10 }}>
+        <FlexWidget {...ctap(c, '/metric/cpu')} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', flexGap: 10 }}>
           <FlexWidget style={{ width: 56 }}>
             <Label c={c} text={`${c.s.cpu} · 1H`} size={8.5} />
           </FlexWidget>
@@ -374,11 +376,11 @@ function Command(c: Ctx) {
           <BarRow c={c} label={c.s.ram} value={`${F.bytesText(sys?.memory.used)} / ${F.bytesText(sys?.memory.total)}`} pct={sys?.memory.percent ?? 0} w={colW} route="/metric/ram" />
           <BarRow c={c} label={c.s.swap} value={`${F.pct(sys?.swap.percent)} %`} pct={sys?.swap.percent ?? 0} w={colW} lv={swapLevel(c)} route="/metric/swap" />
           <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', flexGap: 10 }}>
-            <FlexWidget {...tap('/metric/temp')} style={{ flex: 1, flexDirection: 'column', flexGap: 2 }}>
+            <FlexWidget {...ctap(c, '/metric/temp')} style={{ flex: 1, flexDirection: 'column', flexGap: 2 }}>
               <Label c={c} text={c.s.temp} size={8.5} />
               <Num c={c} v={F.temp(sys?.temperature_c)} u="°C" size={15} />
             </FlexWidget>
-            <FlexWidget {...tap('/metric/fan')} style={{ flex: 1, flexDirection: 'column', flexGap: 2 }}>
+            <FlexWidget {...ctap(c, '/metric/fan')} style={{ flex: 1, flexDirection: 'column', flexGap: 2 }}>
               <Label c={c} text={c.s.fan} size={8.5} />
               <Num c={c} v={F.int(sys?.fan_rpm)} u={sys?.fan_rpm === null ? undefined : 'rpm'} size={15} />
             </FlexWidget>
@@ -419,7 +421,7 @@ function openEvents(list: AgentEvent[] | undefined): AgentEvent[] {
 
 function ListBlock({ c, title, route, children }: { c: Ctx; title: string; route: string; children: any }) {
   return (
-    <FlexWidget {...tap(route)} style={{ flex: 1, flexDirection: 'column', flexGap: 3 }}>
+    <FlexWidget {...ctap(c, route)} style={{ flex: 1, flexDirection: 'column', flexGap: 3 }}>
       <Label c={c} text={title} size={8.5} />
       {children}
     </FlexWidget>
@@ -480,7 +482,7 @@ function Board(c: Ctx) {
       {c.problem ? <Reasons c={c} max={reasonsMax} /> : <SpectralBand c={c} w={inner(c)} />}
       <MetricsRow c={c} size={big5 ? 30 : 24} />
       {big5 && !c.big ? (
-        <FlexWidget {...tap('/metric/cpu')} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', flexGap: 10 }}>
+        <FlexWidget {...ctap(c, '/metric/cpu')} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', flexGap: 10 }}>
           <FlexWidget style={{ width: 56 }}>
             <Label c={c} text={`${c.s.cpu} · 1H`} size={8.5} />
           </FlexWidget>
@@ -524,12 +526,81 @@ function Board(c: Ctx) {
   );
 }
 
+// --- Flex Window (cover-scherm) -------------------------------------------------------------------
+
+/**
+ * Vrije zone rechtsonder: daar heeft het cover-scherm van de Flip 5 een uitsparing (zie de widgetbewerker van
+ * Samsung: ongeveer de halve breedte, een tiende van de hoogte). In dp, ruim genomen.
+ */
+export const COVER_CAMERAS = { w: 150, h: 40 } as const;
+
+/**
+ * Alles in één blik op het cover-scherm, na het intro (logo en draaiende behuizing, native: modules/widget-live).
+ * Elke tik opent het volledige cover-scherm van de app (tapTo, zie registry).
+ * Op het cover-scherm zelf tekent de native layout nex_cover_data.xml (src/widget/coverModel.ts): Samsung toont daar
+ * geen vooraf getekende widgetafbeelding. Deze versie is de reserve als de native kant ontbreekt.
+ */
+function Cover(c: Ctx) {
+  const sys = c.o?.system;
+  const x = c.snap.extras;
+  const pad = 14;
+  const w = inner(c, pad);
+  const colGap = 14;
+  const colW = Math.round((w - colGap) / 2);
+  const tight = c.big || c.problem || Boolean(c.alarm) || c.h < 330;
+  const up = x.updates;
+  const open = openEvents(x.events).length;
+  const io = sys ? `${c.s.read} ${F.rateText(sys.disk_io.read_bps)} · ${c.s.write} ${F.rateText(sys.disk_io.write_bps)}` : F.NONE;
+  const fan = sys?.fan_rpm === null || sys?.fan_rpm === undefined ? F.NONE : `${F.int(sys.fan_rpm)} rpm`;
+  const k = c.o?.counts;
+  const backupLv = k?.backups?.failed ? 'critical' : k?.backups?.old ? 'warning' : 'ok';
+  const age = k?.last_backup_age_seconds;
+  const ageText = F.age(age);
+  const [ageV, ageU] = ageText.includes(' ') ? ageText.split(' ') : [ageText, ''];
+  const total = !c.big;
+  return (
+    <Shell c={c} pad={pad} gap={tight ? 6 : 8}>
+      <Header c={c} />
+      {c.problem ? <Reasons c={c} max={c.big ? 1 : 2} /> : <SpectralBand c={c} w={w} />}
+      <MetricsRow c={c} size={tight ? 22 : 26} />
+      <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', flexGap: colGap }}>
+        <FlexWidget style={{ width: colW, flexDirection: 'column', flexGap: tight ? 4 : 5 }}>
+          <KV c={c} label={c.s.load} value={(sys?.load ?? []).slice(0, 3).map((v) => F.load(v)).join(' · ') || F.NONE} route="/cover" />
+          <KV c={c} label={c.s.fan} value={fan} route="/cover" />
+          <KV c={c} label={c.s.uptime} value={F.uptime(sys?.uptime_seconds)} route="/cover" />
+          <KV c={c} label={c.s.swap} value={`${F.pct(sys?.swap.percent)} %`} route="/cover" />
+          <KV c={c} label={c.s.updates} value={up ? `${up.count} · ${up.held_count ?? 0} ${c.s.held}` : F.NONE} route="/cover" />
+        </FlexWidget>
+        <FlexWidget style={{ flex: 1, flexDirection: 'column', flexGap: tight ? 4 : 5 }}>
+          <NetLines c={c} w={w - colW - colGap} sh={tight ? 6 : 9} />
+          <KV c={c} label={c.s.io} value={io} route="/cover" />
+          <KV c={c} label={c.s.events} value={x.events ? F.int(open) : F.NONE} route="/cover" />
+        </FlexWidget>
+      </FlexWidget>
+      <Space />
+      <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'flex-end', flexGap: 8 }}>
+        <FlexWidget style={{ flex: 1, flexDirection: 'column', flexGap: 6 }}>
+          <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', flexGap: 6 }}>
+            <Tile c={c} label={c.s.services} v={F.int(k?.services.active)} sub={total && k ? `/${k.services.total}` : undefined} lv={k?.services.failed ? 'critical' : 'ok'} route="/cover" />
+            <Tile c={c} label={c.s.containers} v={F.int(k?.containers.running)} sub={total && k ? `/${k.containers.total}` : undefined} lv={k?.containers.stopped ? 'warning' : 'ok'} route="/cover" />
+          </FlexWidget>
+          <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', flexGap: 6 }}>
+            <Tile c={c} label={c.s.sites} v={F.int(k?.sites.up)} sub={total && k ? `/${k.sites.total}` : undefined} lv={k?.sites.down || k?.sites.warning ? 'warning' : 'ok'} route="/cover" />
+            <Tile c={c} label={c.s.backup} v={ageV ?? F.NONE} sub={ageU || undefined} lv={age === null || age === undefined ? 'offline' : backupLv} route="/cover" />
+          </FlexWidget>
+        </FlexWidget>
+        <FlexWidget style={{ width: COVER_CAMERAS.w, height: COVER_CAMERAS.h }} />
+      </FlexWidget>
+    </Shell>
+  );
+}
+
 // --- specialisten -------------------------------------------------------------------------------
 
 function SpecHeader({ c, title, right, route, lv }: { c: Ctx; title: string; right: string; route: string; lv: string }) {
   if (c.alarm) return <AlarmBand c={c} text={alarmText(c, 'long')} />;
   return (
-    <FlexWidget {...tap(route)} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', flexGap: 6 }}>
+    <FlexWidget {...ctap(c, route)} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', flexGap: 6 }}>
       <Diamond c={c} lv={c.off ? 'offline' : lv} />
       <Label c={c} text={title} size={10} color={c.pal.ink} />
       <Grow>
@@ -565,7 +636,7 @@ interface Row {
 function RowLine({ c, r }: { c: Ctx; r: Row }) {
   return (
     <FlexWidget
-      {...(r.route ? tap(r.route) : {})}
+      {...(r.route ? ctap(c, r.route) : {})}
       style={{
         width: 'match_parent', flexDirection: 'row', alignItems: 'center', flexGap: 8, paddingHorizontal: 4, paddingVertical: 5, borderRadius: 4,
         ...(r.hi ? { backgroundColor: c.pal.surface, borderWidth: 1, borderColor: c.pal.hairline } : {}),
@@ -720,7 +791,7 @@ function Disks(c: Ctx) {
   const rows = mounts.map((m) => {
     const failing = Boolean(c.alarm && m.device.includes(c.alarm));
     return (
-      <FlexWidget key={m.mountpoint} {...tap('/disks')} style={{ width: 'match_parent', flexDirection: 'column', flexGap: 4, paddingVertical: 4 }}>
+      <FlexWidget key={m.mountpoint} {...ctap(c, '/disks')} style={{ width: 'match_parent', flexDirection: 'column', flexGap: 4, paddingVertical: 4 }}>
         <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'flex-end', flexGap: 8 }}>
           <Grow>
             <Txt text={m.mountpoint} size={11} color={valueColor(c)} mono fill />
@@ -752,7 +823,7 @@ function Disks(c: Ctx) {
       <SpecHeader c={c} title={c.s.disks} right="" route="/disks" lv={(c.o?.smart ?? []).some((d) => d.status === 'warning') ? 'warning' : 'ok'} />
       {rows.length ? <ScrollList>{rows}</ScrollList> : <Space />}
       <Rule c={c} />
-      <FlexWidget {...tap('/disks')} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', flexGap: 12 }}>
+      <FlexWidget {...ctap(c, '/disks')} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', flexGap: 12 }}>
         <Label c={c} text={c.s.smart} size={8.5} />
         {smart.length ? smart : <Txt text={F.NONE} size={10} color={c.pal.muted} mono />}
       </FlexWidget>
@@ -768,7 +839,7 @@ function Network(c: Ctx) {
     const r = F.rate(bps);
     const pk = peak ? (c.big ? F.rateText(peak.v) : `${F.rateText(peak.v)} · ${F.clock(peak.at)}`) : F.NONE;
     return (
-      <FlexWidget key={label} {...tap(route)} style={{ width: w, flexDirection: 'column', justifyContent: 'flex-end', flexGap: 4 }}>
+      <FlexWidget key={label} {...ctap(c, route)} style={{ width: w, flexDirection: 'column', justifyContent: 'flex-end', flexGap: 4 }}>
         <Label c={c} text={label} />
         <Num c={c} v={r.v} u={r.u} size={26} />
         <Spark c={c} w={w} h={Math.max(24, Math.min(44, c.h - 148))} pts={pts} />
@@ -931,7 +1002,7 @@ function Loading(c: Ctx, kind: WidgetKind) {
 
 const RENDER: Record<WidgetKind, (c: Ctx) => any> = {
   pulse: Pulse, glance: Glance, vitals: Vitals, strip: Strip, overview: Overview, command: Command, board: Board,
-  sites: Sites, containers: Containers, backups: Backups, disks: Disks, network: Network, fleet: Fleet,
+  sites: Sites, containers: Containers, backups: Backups, disks: Disks, network: Network, fleet: Fleet, cover: Cover,
 };
 
 export function renderKind(kind: WidgetKind, c: Ctx) {

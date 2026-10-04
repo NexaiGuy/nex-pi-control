@@ -54,8 +54,17 @@ src/demo/           built-in demo: sample data from the mock agent and a small s
 src/background/     alerts via expo-background-task, no push server
 src/i18n/           en.ts and nl.ts, language follows the phone
 src/theme/tokens.ts all colors, fonts and spacing
-plugins/            config plugin for release signing and an arm64 only build
+plugins/            config plugins: release signing, floating icon, live widgets, Flex Window widget
 ```
+
+## Galaxy Z Flip cover screen (Flex Window)
+
+Two parts, both optional:
+
+- **Flex Window widget** (`PiCover`, 352 x 339 dp). Samsung lists it under Settings > Cover screen > Widgets as "Nex Pi Control · Flex Window", no extra apps needed (`plugins/withFlexWindow.js` adds the `keyguard` category, Samsung's `sub_screen` meta-data and its own receiver class). On the cover screen everything is a native Android layout (`modules/widget-live`: `nex_cover_intro`, `nex_cover_spin`, `nex_cover_data`), not the bitmap that react-native-android-widget draws: Samsung's cover host passes no usable widget size, so a bitmap stays empty there. The JS task (`src/widget/task.tsx`) only fetches the data and hands formatted values to `CoverScreen.renderData` (`src/widget/coverModel.ts`). Every time the cover screen turns on: the Nex AI logo for 3 s, the spinning Pi case as a loading screen (at least 1.8 s, until the data is in), then the full board; every 15 s a refresh while the cover screen stays on (Live widgets must be on). The bottom-right notch of the cover screen stays empty.
+- **Full cover screen** (`src/app/cover.tsx`). Tapping the widget opens `nexpicontrol://cover`. With Good Lock MultiStar ("Launcher Widget" / apps on the cover screen) the app runs on the cover screen itself and switches to this screen automatically: logo, spinning case, then every parameter with the charts of the last hour. Without MultiStar, Samsung asks to unfold and the normal app opens.
+
+The spinner frames come from `scripts/pi-case/render_frames.py` (same model and camera as the in-app spinner).
 
 ## Security in the app
 

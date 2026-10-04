@@ -20,6 +20,7 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.drawable.Icon
+import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -41,6 +42,10 @@ import android.util.Log
  * Wanneer kijk je? Scherm aan, gsm ontgrendeld, Nex Pi Control zelf niet open (die werkt de widgets al bij) en, met
  * "Toegang tot gebruiksgegevens", het startscherm vooraan. Zonder die toegang weten we niet welke app vooraan staat:
  * dan verversen we zolang de gsm ontgrendeld is. Scherm uit of vergrendeld: niets, geen netwerk, geen batterij.
+ *
+ * Flex Window (cover-scherm van de Flip): staat de widget "PiCover" daar, dan speelt bij elk aangaan van het
+ * cover-scherm het intro (logo, draaiende behuizing) en ververst hij elke 15 s zolang het cover-scherm aan is, ook
+ * vergrendeld (de widget staat dan toch al zichtbaar op je cover-scherm). Zie [CoverScreen].
  *
  * Draait als voorgrondservice (type specialUse) met een stille melding, anders stopt Android hem na een minuut.
  */
@@ -131,7 +136,7 @@ class WidgetLiveService : Service() {
       if (!isDeclared(ctx)) return false
       val e = prefs(ctx).edit().putBoolean("enabled", true)
       for ((k, v) in labels) {
-        if (k in setOf("title", "text", "stop", "channel")) e.putString("label_$k", v.take(80))
+        if (k in setOf("title", "text", "stop", "channel", "loading")) e.putString("label_$k", v.take(80))
       }
       e.apply()
       val svc = instance
@@ -189,12 +194,15 @@ class WidgetLiveService : Service() {
     /**
      * Vraagt elke widget van deze app opnieuw te tekenen, met dezelfde APPWIDGET_UPDATE die Android om de 30 minuten
      * stuurt. Enkel naar onze eigen ontvangers (expliciete component). Geeft het aantal widgets terug.
+     * De Flex Window-widget hoort hier niet bij: die staat op het cover-scherm en heeft zijn eigen ritme.
      */
     fun requestUpdate(ctx: Context): Int {
       var n = 0
       try {
         val mgr = AppWidgetManager.getInstance(ctx)
+        val cover = CoverScreen.provider(ctx)
         for (p in providers(ctx, mgr)) {
+          if (p.provider == cover) continue
           val ids = mgr.getAppWidgetIds(p.provider)
           if (ids.isEmpty()) continue
           n += ids.size
@@ -222,6 +230,8 @@ class WidgetLiveService : Service() {
         "looking" to (svc?.looking == true),
         "onHome" to svc?.onHomeNow,
         "lastRefresh" to (if (last > 0) last.toDouble() else null),
+        "coverWidgets" to CoverScreen.ids(ctx).size,
+        "coverOn" to (svc?.coverOn == true),
       )
     }
   }
@@ -250,6 +260,34 @@ class WidgetLiveService : Service() {
   private var foreground: String? = null
   private var lastEventAt = 0L
 
+  // --- Flex Window (cover-scherm) ---
+
+  /** Staat het cover-scherm nu aan (dichtgeklapt)? */
+  @Volatile
+  private var coverOn = false
+
+  /** Telt elk aan- en uitgaan: uitgestelde stappen van een vorig intro doen dan niets meer. */
+  private var coverGen = 0
+
+  private var displayRegistered = false
+
+  private val displayListener = object : DisplayManager.DisplayListener {
+    override fun onDisplayAdded(displayId: Int) = checkCover()
+
+    override fun onDisplayRemoved(displayId: Int) = checkCover()
+
+    override fun onDisplayChanged(displayId: Int) = checkCover()
+  }
+
+  private val coverTick = object : Runnable {
+    override fun run() {
+      if (!coverOn) return
+      // Staat de app zelf op het cover-scherm (Good Lock), dan is de widget niet zichtbaar: niets ophalen.
+      if (!appVisible) CoverScreen.requestUpdate(this@WidgetLiveService)
+      main.postDelayed(this, CoverScreen.REFRESH_MS)
+    }
+  }
+
   private val tick = object : Runnable {
     override fun run() {
       if (!ticking) return
@@ -267,6 +305,7 @@ class WidgetLiveService : Service() {
       // Ontgrendeld of scherm aan: telt als een nieuwe blik, dus als terugkeer naar het startscherm.
       if (intent.action != Intent.ACTION_SCREEN_OFF) wasHome = false
       evaluate()
+      checkCover()
     }
   }
 
@@ -293,7 +332,16 @@ class WidgetLiveService : Service() {
       registerReceiver(screenReceiver, filter)
     }
     receiverRegistered = true
-    Log.d(TAG, "gestart: elke ${interval(this)} s, startschermen: $launchers, gebruiksgegevens: ${usageAccess(this)}")
+    try {
+      (getSystemService(Context.DISPLAY_SERVICE) as DisplayManager).registerDisplayListener(displayListener, main)
+      displayRegistered = true
+    } catch (e: Exception) {
+      Log.w(TAG, "schermen volgen lukt niet: ${e.message}")
+    }
+    // Al dichtgeklapt bij het starten (bv. na een update): geen intro, wel verversen.
+    coverOn = CoverScreen.isOn(this)
+    if (coverOn) main.postDelayed(coverTick, CoverScreen.REFRESH_MS)
+    Log.d(TAG, "gestart: elke ${interval(this)} s, startschermen: $launchers, gebruiksgegevens: ${usageAccess(this)}, cover: $coverOn")
     evaluate()
   }
 
@@ -312,6 +360,17 @@ class WidgetLiveService : Service() {
     ticking = false
     looking = false
     main.removeCallbacks(tick)
+    coverOn = false
+    coverGen++
+    main.removeCallbacks(coverTick)
+    if (displayRegistered) {
+      try {
+        (getSystemService(Context.DISPLAY_SERVICE) as DisplayManager).unregisterDisplayListener(displayListener)
+      } catch (e: Exception) {
+        // al afgemeld
+      }
+      displayRegistered = false
+    }
     if (receiverRegistered) {
       try {
         unregisterReceiver(screenReceiver)
@@ -332,6 +391,8 @@ class WidgetLiveService : Service() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       val ch = NotificationChannel(CHANNEL, label("channel", "Live widgets"), NotificationManager.IMPORTANCE_MIN)
       ch.setShowBadge(false)
+      // Niet op het vergrendelscherm en niet meegeteld op het cover-scherm van de Flip: het is een stille dienstmelding.
+      ch.lockscreenVisibility = Notification.VISIBILITY_SECRET
       nm.createNotificationChannel(ch)
     }
     val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
@@ -353,6 +414,7 @@ class WidgetLiveService : Service() {
       .setContentText(label("text", "Live widgets are on"))
       .setOngoing(true)
       .setShowWhen(false)
+      .setVisibility(Notification.VISIBILITY_SECRET)
       .addAction(Notification.Action.Builder(null as Icon?, label("stop", "Turn off"), stop).build())
     if (open != null) builder.setContentIntent(open)
     return builder.build()
@@ -476,5 +538,38 @@ class WidgetLiveService : Service() {
     } catch (e: Exception) {
       // geen toegang (meer): step() valt terug op "ontgrendeld = kijken"
     }
+  }
+
+  // --- Flex Window ------------------------------------------------------------------------------------
+
+  /** Goedkoop (geen netwerk): wordt bij elke schermwijziging aangeroepen. */
+  internal fun checkCover() {
+    val on = CoverScreen.isOn(this)
+    if (on == coverOn) return
+    coverOn = on
+    if (on) onCoverOn() else onCoverOff()
+  }
+
+  /** Cover-scherm aan: logo, na 3 s de draaiende behuizing, de cijfers zodra ze er zijn, daarna elke 15 s. */
+  private fun onCoverOn() {
+    val gen = ++coverGen
+    main.removeCallbacks(coverTick)
+    val ids = CoverScreen.ids(this)
+    Log.d(TAG, "cover-scherm aan: ${ids.size} widget(s)")
+    if (ids.isEmpty()) return
+    CoverScreen.playIntro(this)
+    // Nu al vragen: de taak haalt de gegevens op tijdens het intro en tekent pas als het laadscherm lang genoeg liep.
+    CoverScreen.requestUpdate(this)
+    main.postDelayed({
+      if (gen == coverGen && coverOn) CoverScreen.requestUpdate(this)
+    }, CoverScreen.LOGO_MS + CoverScreen.SPIN_MIN_MS + CoverScreen.SAFETY_MS)
+    main.postDelayed(coverTick, CoverScreen.REFRESH_MS)
+  }
+
+  private fun onCoverOff() {
+    coverGen++
+    main.removeCallbacks(coverTick)
+    CoverScreen.cancelIntro(this)
+    Log.d(TAG, "cover-scherm uit")
   }
 }

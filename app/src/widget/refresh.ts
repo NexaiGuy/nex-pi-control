@@ -7,18 +7,31 @@ import type { Overview } from '@/api/types';
 import { floatingPi } from '@/lib/floatingPi';
 import { prefsStore } from '@/state/settings';
 
+import { afterIntro } from './cover';
 import { loadSnapshot } from './data';
-import { renderWidget, WIDGETS } from './registry';
+import { COVER_WIDGET, renderWidget, WIDGETS, type WidgetDef } from './registry';
+import { drawCover } from './task';
 
 let last = 0;
 
+function viaLibrary(def: WidgetDef, overview?: Overview): void {
+  void requestWidgetUpdate({
+    widgetName: def.name,
+    renderWidget: async (info) => renderWidget(def, await loadSnapshot(def.needs, { overview, cacheOnly: true }), info),
+    widgetNotFound: () => undefined,
+  }).catch(() => undefined);
+}
+
 function updateAll(overview?: Overview): void {
   for (const def of WIDGETS) {
-    void requestWidgetUpdate({
-      widgetName: def.name,
-      renderWidget: async (info) => renderWidget(def, await loadSnapshot(def.needs, { overview, cacheOnly: true }), info),
-      widgetNotFound: () => undefined,
-    }).catch(() => undefined);
+    if (def.name === COVER_WIDGET) {
+      // Flex Window: native layout, en nooit door het intro heen tekenen.
+      void afterIntro(() => loadSnapshot(def.needs, { overview, cacheOnly: true }))
+        .then((snap) => drawCover(def, snap, () => viaLibrary(def, overview)))
+        .catch(() => undefined);
+      continue;
+    }
+    viaLibrary(def, overview);
   }
 }
 

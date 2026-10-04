@@ -18,6 +18,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { registerBackgroundAlerts } from '@/background/alerts';
 import { OdysseyAmbient } from '@/components/odyssey';
 import { ToastHost } from '@/components/overlays';
+import { CoverSwitch } from '@/features/cover/CoverSwitch';
 import { activateServer } from '@/features/servers/ServerSwitcher';
 import { LockGate } from '@/features/lock/LockGate';
 import { connectionStore, hydrate, hydratedStore, isConfigured, prefsStore, serversStore } from '@/state/settings';
@@ -178,6 +179,8 @@ export default function RootLayout() {
                   <Stack.Screen name="updates" />
                   <Stack.Screen name="events" />
                   <Stack.Screen name="add-server" />
+                  {/* Flex Window (cover-scherm van de Flip): logo, draaiende behuizing, dan alle parameters. */}
+                  <Stack.Screen name="cover" />
                 </Stack.Protected>
                 <Stack.Protected guard={!ready}>
                   <Stack.Screen name="onboarding" />
@@ -188,6 +191,7 @@ export default function RootLayout() {
               </Ambient>
             </LockGate>
             <ToastHost key={`${design}-${themeName}`} />
+            <CoverSwitch enabled={ready} />
           </ThemeProvider>
         </QueryClientProvider>
       </SafeAreaProvider>

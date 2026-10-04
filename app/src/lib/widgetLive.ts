@@ -21,6 +21,16 @@ interface WidgetLiveNative {
   setInterval(seconds: number): void;
   hasUsageAccess(): boolean;
   status(): WidgetLiveStatus;
+  /** Flex Window: tot wanneer (ms) het intro van de cover-widget loopt, 0 = geen intro. */
+  coverIntroUntil(): number;
+  /** Flex Window: servernaam onder de draaiende behuizing in het laadscherm. */
+  setCoverCaption(text: string): void;
+  /** Staat de app op het cover-scherm (Good Lock MultiStar)? */
+  isOnCoverDisplay(): boolean;
+  /** Flex Window: het intro meteen tonen. false: geen widget op het cover-scherm. */
+  playCoverIntro(): boolean;
+  /** Flex Window: de cijfers in de native layout (JSON uit src/widget/coverModel.ts). false: niet getekend. */
+  renderCover(json: string): boolean;
 }
 
 export interface WidgetLiveStatus {
@@ -36,6 +46,10 @@ export interface WidgetLiveStatus {
   onHome: boolean | null;
   /** ms, laatste verversing (null: nog geen). */
   lastRefresh: number | null;
+  /** Flex Window-widgets op het cover-scherm (oudere builds: ontbreekt). */
+  coverWidgets?: number;
+  /** Cover-scherm nu aan. */
+  coverOn?: boolean;
 }
 
 /** Keuzes in Instellingen (seconden). */
@@ -54,7 +68,7 @@ function call<T>(fn: (n: WidgetLiveNative) => T, fallback: T): T {
 }
 
 function labels(seconds: number): Record<string, string> {
-  return { title: 'Nex Pi Control', text: t.widgetLive.notifText(seconds), stop: t.widgetLive.stop, channel: t.widgetLive.channel };
+  return { title: 'Nex Pi Control', text: t.widgetLive.notifText(seconds), stop: t.widgetLive.stop, channel: t.widgetLive.channel, loading: t.widgetLive.coverLoading };
 }
 
 export const widgetLive = {
@@ -74,6 +88,17 @@ export const widgetLive = {
     }, undefined),
   hasUsageAccess: (): boolean => call((n) => n.hasUsageAccess(), false),
   status: (): WidgetLiveStatus | null => call((n) => n.status(), null),
+  /** Flex Window: tot wanneer (ms, wandklok) het intro loopt. 0: geen intro of geen native module. */
+  coverIntroUntil: (): number =>
+    call((n) => {
+      const v = n.coverIntroUntil();
+      return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+    }, 0),
+  setCoverCaption: (text: string): void => call((n) => n.setCoverCaption(text), undefined),
+  /** Staat de app zelf op het cover-scherm van een Flip (via Good Lock MultiStar)? */
+  isOnCoverDisplay: (): boolean => call((n) => n.isOnCoverDisplay() === true, false),
+  playCoverIntro: (): boolean => call((n) => n.playCoverIntro() === true, false),
+  renderCover: (json: string): boolean => call((n) => n.renderCover(json) === true, false),
 };
 
 /**

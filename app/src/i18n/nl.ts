@@ -527,6 +527,22 @@ export const nl = {
     needsAgent: (v: string) => `Deze functie heeft agent 1.2.0 of nieuwer nodig. Jouw Pi draait ${v}. Werk één keer bij met het installatiecommando, daarna kan het vanuit de app.`,
     manualUpdate: 'Bijwerken via SSH',
   },
+  cover: {
+    connecting: 'Verbinden',
+    openApp: 'Volledige app openen',
+    details: 'Details',
+    swap: 'Swap',
+    updates: 'Updates',
+    held: 'vastgehouden',
+    events: 'Open meldingen',
+    noEvents: 'Geen open meldingen',
+    disks: 'Schijven',
+    network: 'Netwerk · 1u',
+    io: 'Schijf-I/O',
+    write: 'schrijven',
+    updated: (time: string) => `bijgewerkt ${time}`,
+    noData: 'Nog geen gegevens van je Pi',
+  },
   widgetLive: {
     title: 'Live widgets',
     toggle: 'Widgets live bijwerken',
@@ -534,13 +550,14 @@ export const nl = {
     every: (s: number) => (s < 60 ? `${s} s` : `${Math.round(s / 60)} min`),
     usageNeeded: 'Met "Toegang tot gebruiksgegevens" ververst de app enkel als je startscherm vooraan staat. Zonder die toegang ververst hij zolang je gsm ontgrendeld is, ook als je in een andere app zit.',
     usageButton: 'Toegang geven',
-    note: 'Je widgets tonen de toestand van je Pi van dit moment zodra je ernaar kijkt: meteen bij het ontgrendelen en bij elke terugkeer naar je startscherm, daarna elke gekozen tijd. Scherm uit of vergrendeld: niets, geen netwerk en geen batterijverbruik. Android vraagt hiervoor een stille melding. Staat dit uit, dan verversen de widgets enkel om de 30 minuten en wanneer je de app opent.',
+    note: 'Je widgets tonen de toestand van je Pi van dit moment zodra je ernaar kijkt: meteen bij het ontgrendelen en bij elke terugkeer naar je startscherm, daarna elke gekozen tijd. Scherm uit of vergrendeld: niets, geen netwerk en geen batterijverbruik. Uitzondering: de Flex Window-widget op het cover-scherm van een Flip toont bij elk aangaan het Nex AI-logo en de draaiende behuizing, en ververst elke 15 s zolang het cover-scherm aan is. Android vraagt hiervoor een stille melding. Staat dit uit, dan verversen de widgets enkel om de 30 minuten en wanneer je de app opent.',
     noWidgets: 'Er staat nog geen widget van Nex Pi Control op je startscherm. Hou je startscherm ingedrukt, kies Widgets en zoek Nex Pi Control.',
     status: (running: boolean, widgets: number, last: string | null, home: boolean | null) =>
       `Dienst: ${running ? 'actief' : 'uit'} · widgets: ${widgets}${last ? ` · laatst ververst: ${last}` : ''}${home === null ? '' : home ? ' · startscherm vooraan' : ' · andere app vooraan'}`,
     notifText: (s: number) => `Widgets live · elke ${s < 60 ? `${s} s` : `${Math.round(s / 60)} min`}`,
     stop: 'Uitzetten',
     channel: 'Live widgets',
+    coverLoading: 'Verbinden',
   },
   floating: {
     status: (running: boolean, draw: boolean, usage: boolean, fg: string | null, home: boolean | null, bank = false) =>

@@ -3,7 +3,7 @@
     "name": "Nex Pi Control",
     "slug": "nex-pi-control",
     "scheme": "nexpicontrol",
-    "version": "1.3.5",
+    "version": "1.4.2",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -12,7 +12,7 @@
     "newArchEnabled": true,
     "android": {
       "package": "be.nexai.picontrol",
-      "versionCode": 9,
+      "versionCode": 12,
       "adaptiveIcon": {
         "backgroundColor": "#050508",
         "backgroundImage": "./assets/android-icon-background.png",
@@ -98,6 +98,7 @@
           "enabled": true
         }
       ],
+      "./plugins/withFlexWindow",
       "expo-localization",
       [
         "react-native-android-widget",
@@ -285,6 +286,16 @@
               "maxResizeHeight": "260dp",
               "resizeMode": "horizontal|vertical",
               "previewImage": "./assets/widget-fleet.png",
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "PiCover",
+              "label": "Flex Window",
+              "description": "For the cover screen of your Galaxy Z Flip: the Nex AI logo, then everything about your Pi at once",
+              "minWidth": "352dp",
+              "minHeight": "339dp",
+              "resizeMode": "horizontal|vertical",
+              "previewImage": "./assets/widget-cover.png",
               "updatePeriodMillis": 1800000
             }
           ]

@@ -32,6 +32,8 @@ export interface Ctx {
   problem: boolean;
   /** Apparaatnaam van een falende schijf (sda), of null. Gaat boven alles. */
   alarm: string | null;
+  /** Elke tik opent dit scherm (Flex Window: het volledige cover-scherm), in plaats van het scherm per vak. */
+  tapTo?: string;
 }
 
 // --- tikzones -----------------------------------------------------------------------------------
@@ -39,6 +41,11 @@ export interface Ctx {
 export function tap(route: string): { clickAction: string; clickActionData?: Record<string, unknown> } {
   if (route === '/') return { clickAction: 'OPEN_APP' };
   return { clickAction: 'OPEN_URI', clickActionData: { uri: `nexpicontrol://${route.replace(/^\//, '')}` } };
+}
+
+/** Tikzone binnen een widget: het scherm van dat vak, of overal hetzelfde scherm als de widget dat vraagt (tapTo). */
+export function ctap(c: Pick<Ctx, 'tapTo'>, route: string): ReturnType<typeof tap> {
+  return tap(c.tapTo ?? route);
 }
 
 // --- kleuren ------------------------------------------------------------------------------------
@@ -156,7 +163,7 @@ export function timeText(c: Ctx, short: boolean): string {
 export function AlarmBand({ c, text, size = 11 }: { c: Ctx; text: string; size?: number }) {
   return (
     <FlexWidget
-      {...tap('/disks')}
+      {...ctap(c, '/disks')}
       style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', flexGap: 8, backgroundColor: c.pal.crit, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5 }}
     >
       <Diamond c={c} lv="critical" color={c.pal.onCrit} />
@@ -196,7 +203,7 @@ export function Header({ c, short = false, noServer = false, noTitle = false, wo
   }
   kids.push(<Txt key="time" text={timeText(c, short)} size={10} color={c.pal.muted} mono />);
   return (
-    <FlexWidget {...tap('/')} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', flexGap: 8 }}>
+    <FlexWidget {...ctap(c, '/')} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', flexGap: 8 }}>
       {kids}
     </FlexWidget>
   );
@@ -207,7 +214,7 @@ export function Header({ c, short = false, noServer = false, noTitle = false, wo
 /** Label links, waarde rechts. */
 export function KV({ c, label, value, size = 9.5, route }: { c: Ctx; label: string; value: string; size?: number; route?: string }) {
   return (
-    <FlexWidget {...(route ? tap(route) : {})} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', flexGap: 6 }}>
+    <FlexWidget {...(route ? ctap(c, route) : {})} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', flexGap: 6 }}>
       <Label c={c} text={label} size={8.5} />
       <Grow align="flex-end">
         <Txt text={value} size={size} color={valueColor(c)} mono align="right" />
@@ -218,7 +225,7 @@ export function KV({ c, label, value, size = 9.5, route }: { c: Ctx; label: stri
 
 export function BarRow({ c, label, value, pct, w, lv = 'ok', route }: { c: Ctx; label: string; value: string; pct: number; w: number; lv?: string; route?: string }) {
   return (
-    <FlexWidget {...(route ? tap(route) : {})} style={{ width: 'match_parent', flexDirection: 'column', flexGap: 3 }}>
+    <FlexWidget {...(route ? ctap(c, route) : {})} style={{ width: 'match_parent', flexDirection: 'column', flexGap: 3 }}>
       <KV c={c} label={label} value={value} />
       <Bar c={c} w={w} pct={pct} lv={lv} />
     </FlexWidget>
@@ -228,7 +235,7 @@ export function BarRow({ c, label, value, pct, w, lv = 'ok', route }: { c: Ctx; 
 export function Slab({ c, children, route, pad = [6, 8], weight = 1, gap = 3 }: { c: Ctx; children: any; route?: string; pad?: [number, number]; weight?: number; gap?: number }) {
   return (
     <FlexWidget
-      {...(route ? tap(route) : {})}
+      {...(route ? ctap(c, route) : {})}
       style={{ flex: weight, flexDirection: 'column', flexGap: gap, backgroundColor: c.pal.surface, borderWidth: 1, borderColor: c.pal.hairline, borderRadius: 10, paddingVertical: pad[0], paddingHorizontal: pad[1] }}
     >
       {children}

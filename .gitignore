@@ -37,3 +37,11 @@ design/
 # Lokale metingen en losse previews
 metingen/
 Claude outputs/
+
+# Lokale geheimen en releasebestanden (nooit committen)
+Header and client ID Pi control phone
+secrets/
+*.pem
+.release/
+/.*.tgz
+/.*.patch

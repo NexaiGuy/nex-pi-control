@@ -1,11 +1,11 @@
-// Startschermwidgets (Odyssey): alle 13 bouwen een geldige boom in elke toestand, licht en donker,
+// Widgets (Odyssey): alle 14 (13 startscherm + de Flex Window) bouwen een geldige boom in elke toestand, licht en donker,
 // tonen enkel echte velden, en de getalopmaak volgt de regels van het designsysteem.
 import fixtures from './fixtures/mock-api.json';
 import type { Backup, Container, Overview, Point, Site } from '@/api/types';
 import { downsample, loadingSnapshot, peakOf, type Snapshot } from '@/widget/data';
 import * as F from '@/widget/odyssey/format';
-import { REF } from '@/widget/odyssey/widgets';
-import { ALL_NEEDS, makeCtx, renderWidget, WIDGETS } from '@/widget/registry';
+import { COVER_CAMERAS, REF } from '@/widget/odyssey/widgets';
+import { ALL_NEEDS, COVER_WIDGET, makeCtx, renderWidget, WIDGETS } from '@/widget/registry';
 import { DARK } from '@/widget/odyssey/palette';
 
 const { buildWidgetTree } = jest.requireActual('react-native-android-widget/lib/commonjs/api/build-widget-tree') as {
@@ -29,9 +29,9 @@ function texts(tree: unknown, out: string[] = []): string[] {
 const okOverview: Overview = { ...overview, disk_alarms: [], health: { status: 'ok', title: 'OK', reasons: [] } };
 
 describe('widgets', () => {
-  test('13 widgets, PiStatus blijft de naam van de 4x2', () => {
-    expect(WIDGETS).toHaveLength(13);
-    expect(new Set(WIDGETS.map((w) => w.name)).size).toBe(13);
+  test('14 widgets, PiStatus blijft de naam van de 4x2', () => {
+    expect(WIDGETS).toHaveLength(14);
+    expect(new Set(WIDGETS.map((w) => w.name)).size).toBe(14);
     expect(WIDGETS.find((w) => w.name === 'PiStatus')?.kind).toBe('overview');
     expect(ALL_NEEDS).toEqual(expect.arrayContaining(['cpu1h', 'net24', 'fleet']));
   });
@@ -107,6 +107,69 @@ describe('widgets', () => {
     const spy = jest.spyOn(require('react-native').PixelRatio, 'getFontScale').mockReturnValue(1.3);
     expect(makeCtx('strip', snap(), DARK).big).toBe(true);
     spy.mockRestore();
+  });
+});
+
+type Node = { type: string; props: Record<string, unknown>; children?: Node[] };
+
+function clicks(n: Node, out: string[] = []): string[] {
+  const a = n.props.clickAction as string | undefined;
+  if (a) out.push(a === 'OPEN_URI' ? String((n.props.clickActionData as { uri?: string } | undefined)?.uri) : a);
+  for (const ch of n.children ?? []) clicks(ch, out);
+  return out;
+}
+
+describe('Flex Window (cover-scherm)', () => {
+  const def = WIDGETS.find((w) => w.name === COVER_WIDGET)!;
+
+  test('PiCover bestaat, is 352 x 339 dp (minimum van Samsung) en vraagt enkel wat hij toont', () => {
+    expect(def.kind).toBe('cover');
+    expect(REF.cover).toEqual([352, 339]);
+    expect([...def.needs].sort()).toEqual(['device', 'events', 'info', 'net24', 'updates']);
+  });
+
+  test('elke tik opent het volledige cover-scherm, in elke toestand', () => {
+    for (const s of [snap({ overview: okOverview }), snap(), snap({ offline: true })]) {
+      const tree = buildWidgetTree((renderWidget(def, s) as { dark: unknown }).dark) as Node;
+      const all = clicks(tree);
+      expect(all.length).toBeGreaterThan(0);
+      expect(new Set(all)).toEqual(new Set(['nexpicontrol://cover']));
+    }
+  });
+
+  test('andere widgets houden hun eigen tikzones', () => {
+    const board = WIDGETS.find((w) => w.kind === 'board')!;
+    const all = clicks(buildWidgetTree((renderWidget(board, snap()) as { dark: unknown }).dark) as Node);
+    expect(all).not.toContain('nexpicontrol://cover');
+    expect(makeCtx('board', snap(), DARK).tapTo).toBeUndefined();
+    expect(makeCtx('cover', snap(), DARK).tapTo).toBe('/cover');
+  });
+
+  test('toont alle parameters: status, CPU, RAM, temp, schijf, load, fan, uptime, swap, updates, netwerk, I/O, meldingen, tellers', () => {
+    const t = texts(buildWidgetTree((renderWidget(def, snap({ overview: okOverview, extras: { events: [], updates: { count: 3, held_count: 1 } as never } })) as { dark: unknown }).dark));
+    for (const label of ['CPU %', 'RAM %', 'TEMP °C', 'SCHIJF %', 'LOAD', 'FAN', 'UPTIME', 'SWAP', 'UPDATES', 'IN', 'UIT', 'I/O', 'OPEN MELDINGEN', 'DIENSTEN', 'CONTAINERS', 'SITES', 'BACKUP']) {
+      expect(t).toContain(label);
+    }
+    expect(t).toContain('3 · 1 vastgehouden');
+  });
+
+  test('de uitsparing rechtsonder blijft leeg', () => {
+    const tree = buildWidgetTree((renderWidget(def, snap({ overview: okOverview })) as { dark: unknown }).dark) as Node;
+    const empty = (n: Node): boolean => !(n.children ?? []).length && n.type === 'LinearLayoutWidget';
+    let found = false;
+    const walk = (n: Node) => {
+      const { width, height } = n.props as { width?: number; height?: number };
+      if (empty(n) && width === COVER_CAMERAS.w && (height ?? 0) >= COVER_CAMERAS.h) found = true;
+      for (const ch of n.children ?? []) walk(ch);
+    };
+    walk(tree);
+    expect(found).toBe(true);
+  });
+
+  test('een falende schijf staat ook op het cover-scherm bovenaan', () => {
+    const alarm: Overview = { ...overview, disk_alarms: [{ device: '/dev/sda', status: 'failing', message: 'x', reasons: [] }] };
+    const t = texts(buildWidgetTree((renderWidget(def, snap({ overview: alarm })) as { dark: unknown }).dark));
+    expect(t).toContain('Schijf sda vertoont tekenen van falen');
   });
 });
 

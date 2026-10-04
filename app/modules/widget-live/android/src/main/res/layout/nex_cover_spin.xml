@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Flex Window, stap 2: de draaiende Pi-behuizing als laadscherm, tot de cijfers er zijn. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/nex_cover_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/nex_cover_bg">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginBottom="24dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+        <ProgressBar
+            android:layout_width="136dp"
+            android:layout_height="136dp"
+            android:contentDescription="Nex Pi Control"
+            android:indeterminate="true"
+            android:indeterminateDrawable="@drawable/nex_cover_pi_spin"
+            android:indeterminateOnly="true"
+            android:maxHeight="136dp"
+            android:maxWidth="136dp"
+            android:minHeight="136dp"
+            android:minWidth="136dp" />
+
+        <TextView
+            android:id="@+id/nex_cover_caption"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.06"
+            android:maxLines="1"
+            android:textColor="#F2F2F0"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/nex_cover_sub"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:letterSpacing="0.14"
+            android:maxLines="1"
+            android:textAllCaps="true"
+            android:textColor="#8A8A94"
+            android:textSize="10sp" />
+    </LinearLayout>
+</FrameLayout>

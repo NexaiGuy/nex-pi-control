@@ -1,5 +1,6 @@
-// Alle startschermwidgets van Nex Pi Control: Android-naam, soort, welke gegevens nodig zijn, en de weergave.
+// Alle widgets van Nex Pi Control: Android-naam, soort, welke gegevens nodig zijn, en de weergave.
 // De naam PiStatus blijft voor de 4x2 Overview, zodat widgets die al op een startscherm staan blijven werken.
+// PiCover staat niet op het startscherm maar op de Flex Window (cover-scherm van de Flip): plugins/withFlexWindow.js.
 import { PixelRatio } from 'react-native';
 import type { WidgetInfo, WidgetRepresentation } from 'react-native-android-widget';
 
@@ -29,7 +30,11 @@ export const WIDGETS: readonly WidgetDef[] = [
   { name: 'PiDisks', kind: 'disks', needs: [] },
   { name: 'PiNetwork', kind: 'network', needs: ['net24'] },
   { name: 'PiFleet', kind: 'fleet', needs: ['fleet'] },
+  { name: 'PiCover', kind: 'cover', needs: ['net24', 'events', 'updates', 'device', 'info'] },
 ];
+
+/** De Flex Window-widget: intro en eigen verversritme (src/widget/cover.ts, modules/widget-live). */
+export const COVER_WIDGET = 'PiCover';
 
 export const widgetByName = (name: string): WidgetDef | undefined => WIDGETS.find((w) => w.name === name);
 
@@ -58,7 +63,10 @@ export function makeCtx(kind: WidgetKind, snap: Snapshot, pal: Pal, size?: { wid
   // Een falende schijf gaat boven alles, ook als de Pi intussen offline is (laatst bekende toestand).
   const alarm = dev ? dev.replace(/^\/dev\//, '') : null;
   const lv = level(snap, alarm);
-  return { pal, s: copy, fs, big: fs > 1.15, w, h, snap, o, lv, off: lv === 'offline', problem: lv === 'warning' || lv === 'critical', alarm };
+  const ctx: Ctx = { pal, s: copy, fs, big: fs > 1.15, w, h, snap, o, lv, off: lv === 'offline', problem: lv === 'warning' || lv === 'critical', alarm };
+  // Flex Window: elke tik opent het volledige cover-scherm van de app.
+  if (kind === 'cover') ctx.tapTo = '/cover';
+  return ctx;
 }
 
 /**

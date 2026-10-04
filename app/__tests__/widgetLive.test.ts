@@ -70,7 +70,7 @@ test('de melding krijgt de tekst in de taal van de app, met het interval', () =>
   const { widgetLive } = load(n);
   widgetLive.start();
   const labels = n.start.mock.calls[0][0] as Record<string, string>;
-  expect(Object.keys(labels).sort()).toEqual(['channel', 'stop', 'text', 'title']);
+  expect(Object.keys(labels).sort()).toEqual(['channel', 'loading', 'stop', 'text', 'title']);
   expect(labels.text).toMatch(/2 min/);
   expect(labels.text).not.toMatch(/[\u2013\u2014]/);
 });
@@ -155,4 +155,29 @@ describe('fetchShared', () => {
     const ok = await fetchShared('test.err', 15_000, async () => 'terug');
     expect(ok.data).toBe('terug');
   });
+});
+
+test('Flex Window: zonder (of met een oudere) native kant geen intro en geen cover-scherm, nooit een crash', () => {
+  for (const native of [null, fakeNative()]) {
+    const { widgetLive } = load(native);
+    expect(widgetLive.coverIntroUntil()).toBe(0);
+    expect(widgetLive.isOnCoverDisplay()).toBe(false);
+    expect(widgetLive.playCoverIntro()).toBe(false);
+    expect(widgetLive.renderCover('{}')).toBe(false);
+    expect(() => widgetLive.setCoverCaption('homelab-pi')).not.toThrow();
+  }
+});
+
+test('Flex Window: de native kant geeft het einde van het intro en het scherm door', () => {
+  const n = fakeNative() as Native & Record<string, jest.Mock>;
+  n.coverIntroUntil = jest.fn(() => 1_791_000_000_000);
+  n.isOnCoverDisplay = jest.fn(() => true);
+  n.setCoverCaption = jest.fn();
+  const { widgetLive } = load(n);
+  expect(widgetLive.coverIntroUntil()).toBe(1_791_000_000_000);
+  expect(widgetLive.isOnCoverDisplay()).toBe(true);
+  widgetLive.setCoverCaption('homelab-pi');
+  expect(n.setCoverCaption).toHaveBeenCalledWith('homelab-pi');
+  n.coverIntroUntil.mockReturnValue(Number.NaN);
+  expect(widgetLive.coverIntroUntil()).toBe(0);
 });
