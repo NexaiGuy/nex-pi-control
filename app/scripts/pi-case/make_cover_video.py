@@ -1,6 +1,8 @@
-# Achtergrondvideo voor het klokscherm van de Flex Window (cover-scherm Galaxy Z Flip 5, 748 x 720 px):
+# Achtergrondvideo voor het klokscherm van de Flex Window (cover-scherm Galaxy Z Flip 5, 720 breed x 748 hoog):
 # 3 s het Nex AI-logo met een korte glitch, daarna de draaiende Pi-behuizing. 15 s, zodat Samsung hem aanvaardt.
 # De klok, datum, meldingen en de camera-knop tekent Samsung erover: het midden blijft vrij voor logo en behuizing.
+# Het logo staat al vol in het eerste beeld (Galerij-miniatuur, en het beeld dat je ziet als het scherm aangaat).
+# De behuizing maakt precies 3 volle draaien, zodat het laatste beeld (waar Samsung op blijft staan) recht vooraan is.
 #
 # Gebruik:
 #   python3 render_frames.py 420 120 /tmp/pi           (120 beelden van de behuizing, 3 graden per stap)
@@ -9,12 +11,14 @@ import math, subprocess, sys
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 LOGO, PIDIR, FONTS, OUT = sys.argv[1:5]
-W, H, FPS, SECONDS = 748, 720, 30, 15
-CX, CY = W // 2, 330            # iets boven het midden: onderaan staan Samsungs meldingen en camera-knop
+W, H, FPS, SECONDS = 720, 748, 30, 15
+CX, CY = W // 2, 344            # iets boven het midden: onderaan staan Samsungs meldingen en camera-knop
 LOGO_PX = 360
 PI_PX = 420
 FRAMES = 120
-TURN_S = 4.0                    # één volledige draai
+PI_START = 2.9
+TURNS = 3
+TURN_S = (SECONDS - PI_START) / TURNS   # ~4 s per draai, eindigt recht vooraan
 MAGENTA, CYAN, MINT, MUTED = (244, 114, 182), (34, 211, 238), (52, 245, 197), (138, 138, 148)
 
 def ease_out(t): return 1 - (1 - t) ** 3
@@ -69,10 +73,10 @@ ff = subprocess.Popen(['ffmpeg', '-y', '-loglevel', 'error', '-f', 'rawvideo', '
 for n in range(FPS * SECONDS):
     t = n / FPS
     f = bg.copy()
-    # 1. het logo (0 tot 2,9 s)
-    if t < 2.9:
-        op = ease_out(ramp(t, 0, 0.38)) * (1 - ramp(t, 2.58, 2.88))
-        sc = 0.94 + 0.06 * ease_out(ramp(t, 0, 0.52)) + 0.03 * ramp(t, 2.57, 2.87)
+    # 1. het logo (0 tot 2,9 s), vol zichtbaar vanaf het eerste beeld
+    if t < PI_START:
+        op = 1 - ramp(t, 2.58, 2.88)
+        sc = 0.97 + 0.03 * ease_out(ramp(t, 0, 0.45)) + 0.03 * ramp(t, 2.57, 2.87)
         j1, g1 = jolt(t, 0.95)
         j2, g2 = jolt(t, 1.85)
         dx, gh = j1 + j2, max(g1, g2)
@@ -87,10 +91,11 @@ for n in range(FPS * SECONDS):
             ImageDraw.Draw(line).line([(CX - LOGO_PX * 0.56, y), (CX + LOGO_PX * 0.56, y)], fill=MINT + (round(140 * op),), width=2)
             f.alpha_composite(line)
     # 2. de draaiende behuizing (vanaf 2,9 s)
-    if t >= 2.9:
-        op = ease_out(ramp(t, 2.9, 3.3))
-        sc = 0.96 + 0.04 * ease_out(ramp(t, 2.9, 3.4))
-        idx = int(((t - 2.9) / TURN_S) * FRAMES) % FRAMES
+    if t >= PI_START:
+        op = ease_out(ramp(t, PI_START, PI_START + 0.4))
+        sc = 0.96 + 0.04 * ease_out(ramp(t, PI_START, PI_START + 0.5))
+        last = n == FPS * SECONDS - 1
+        idx = 0 if last else int(((t - PI_START) / TURN_S) * FRAMES) % FRAMES
         sh = shadow.copy(); sh.putalpha(sh.getchannel('A').point(lambda a: round(a * op)))
         f.alpha_composite(sh)
         paste_center(f, pis[idx], CX, CY, sc, op)
@@ -100,7 +105,7 @@ for n in range(FPS * SECONDS):
         cd.text((CX - tw / 2, CY + PI_PX / 2 + 4), caption, font=font, fill=MUTED + (round(255 * op),))
         f.alpha_composite(cap)
     ff.stdin.write(f.convert('RGB').tobytes())
-    if n == 45: f.convert('RGB').save(OUT.replace('.mp4', '-logo.png'))
+    if n == 0: f.convert('RGB').save(OUT.replace('.mp4', '-logo.png'))
     if n == 6 * FPS: f.convert('RGB').save(OUT.replace('.mp4', '-still.png'))
 ff.stdin.close()
 ff.wait()
