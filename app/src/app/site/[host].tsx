@@ -2,6 +2,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { Linking } from 'react-native';
 
 import { useHistory, useSites } from '@/api/hooks';
+import { LabelCard } from '@/components/LabelCard';
 import { DetailScreen } from '@/components/layout';
 import { Button, Card, KeyValue, Row, SectionTitle, StatusPill, T } from '@/components/primitives';
 import { StatsCard } from '@/features/charts/StatsCard';
@@ -34,6 +35,7 @@ export default function SiteDetail() {
           <KeyValue k={t.system.checked} v={dateTime(s.checked_at)} />
         </Card>
       ) : null}
+      <LabelCard kind="site" name={h} item={s} />
       <SectionTitle>{t.system.latency}</SectionTitle>
       {hist.data ? <StatsCard title={t.stats.latency24h} unit="ms" data={hist.data} /> : null}
       <Button label={t.system.openSite} icon="external-link" kind="secondary" style={{ marginTop: space.lg }} onPress={() => void Linking.openURL(`https://${h}`)} />

@@ -54,23 +54,27 @@ def compute_health(
     if mem is not None and mem >= 90:
         add("warning", "memory", L(f"RAM {mem:.0f}% in gebruik", f"RAM {mem:.0f}% in use"))
 
-    # 3. Diensten, containers, sites, backups
+    # 3. Diensten, containers, sites, backups. Wat bewust uit staat (parked, zie labels.py) telt nooit als probleem.
+    services = [s for s in services or [] if not s.get("parked")]
+    containers = [c for c in containers or [] if not c.get("parked")]
+    sites = [s for s in sites or [] if not s.get("parked")]
     if services:
         failed = [s["name"] for s in services if s.get("active") == "failed"]
         if failed:
             add("warning", "services_failed", L(f"{len(failed)} dienst(en) gefaald: ", f"{len(failed)} service(s) failed: ") + ", ".join(failed[:3]) + ("…" if len(failed) > 3 else ""))
     if containers:
-        unhealthy = [c["name"] for c in containers if c.get("health") == "unhealthy"]
+        # Enkel draaiende containers: na het stoppen bewaart Docker de laatste healthcheck, die zegt niets meer.
+        unhealthy = [c["name"] for c in containers if c.get("health") == "unhealthy" and c.get("state") in ("running", "restarting")]
         if unhealthy:
-            add("warning", "containers_unhealthy", L(f"{len(unhealthy)} container(s) ongezond: ", f"{len(unhealthy)} container(s) unhealthy: ") + ", ".join(unhealthy[:3]))
+            add("warning", "containers_unhealthy", L(f"{len(unhealthy)} container(s) ongezond: ", f"{len(unhealthy)} container(s) unhealthy: ") + ", ".join(unhealthy[:3]) + ("…" if len(unhealthy) > 3 else ""))
         crashed = [c["name"] for c in containers if c.get("state") in ("exited", "dead") and c.get("exit_code") not in (0, None)
                    and c.get("restart_policy") not in ("no", None, "")]
         if crashed:
-            add("warning", "containers_exited", L(f"{len(crashed)} container(s) gestopt met fout: ", f"{len(crashed)} container(s) exited with an error: ") + ", ".join(crashed[:3]))
+            add("warning", "containers_exited", L(f"{len(crashed)} container(s) gestopt met fout: ", f"{len(crashed)} container(s) exited with an error: ") + ", ".join(crashed[:3]) + ("…" if len(crashed) > 3 else ""))
     if sites:
         down = [s["hostname"] for s in sites if s.get("state") == "down"]
         if down:
-            add("warning", "sites_down", L(f"{len(down)} site(s) onbereikbaar: ", f"{len(down)} site(s) unreachable: ") + ", ".join(down[:3]))
+            add("warning", "sites_down", L(f"{len(down)} site(s) onbereikbaar: ", f"{len(down)} site(s) unreachable: ") + ", ".join(down[:3]) + ("…" if len(down) > 3 else ""))
         # Antwoordt wel, maar met een foutcode (404, 410, 429...). Telt niet als online, dus ook melden.
         erring = [s for s in sites if s.get("state") == "warning"]
         if erring:
@@ -104,9 +108,13 @@ def compute_health(
 
 
 def counts(services, containers, sites, backups) -> dict[str, Any]:
-    s = services or []
-    c = containers or []
-    st = sites or []
+    """Tellers voor het overzicht. `total` telt enkel wat bewaakt wordt; `parked` is wat bewust uit staat, `all` alles samen."""
+    s_all = services or []
+    c_all = containers or []
+    st_all = sites or []
+    s = [x for x in s_all if not x.get("parked")]
+    c = [x for x in c_all if not x.get("parked")]
+    st = [x for x in st_all if not x.get("parked")]
     newest = None
     jobs = [b for b in backups or [] if b.get("kind", "job") == "job"]
     for b in jobs:
@@ -116,12 +124,15 @@ def counts(services, containers, sites, backups) -> dict[str, Any]:
     old = sum(1 for b in jobs if b.get("state") == "ok" and b.get("age_seconds", 0) > b.get("max_age_seconds", BACKUP_MAX_AGE))
     return {
         "services": {"active": sum(1 for x in s if x.get("active") == "active"),
-                     "failed": sum(1 for x in s if x.get("active") == "failed"), "total": len(s)},
+                     "failed": sum(1 for x in s if x.get("active") == "failed"), "total": len(s),
+                     "parked": len(s_all) - len(s), "all": len(s_all)},
         "containers": {"running": sum(1 for x in c if x.get("state") == "running"),
-                       "stopped": sum(1 for x in c if x.get("state") != "running"), "total": len(c)},
+                       "stopped": sum(1 for x in c if x.get("state") != "running"), "total": len(c),
+                       "parked": len(c_all) - len(c), "all": len(c_all)},
         "sites": {"up": sum(1 for x in st if x.get("state") in ("up", "protected")),
                   "down": sum(1 for x in st if x.get("state") == "down"),
-                  "warning": sum(1 for x in st if x.get("state") == "warning"), "total": len(st)},
+                  "warning": sum(1 for x in st if x.get("state") == "warning"), "total": len(st),
+                  "parked": len(st_all) - len(st), "all": len(st_all)},
         "last_backup_age_seconds": newest,
         "backups": {"failed": failed, "old": old, "total": len(jobs)},
     }

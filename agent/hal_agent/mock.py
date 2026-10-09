@@ -20,6 +20,7 @@ from .collectors.gpio import PINOUT
 from .config import ConfigFiles, Settings
 from .health import compute_health, counts, disk_alarms
 from .history import METRIC_CATALOG, RANGES, describe_metric, summarize
+from .labels import KINDS, Labels, LabelStore, parked_keys
 from .maintenance import EventStore, conditions, parse_version
 
 GB = 1024**3
@@ -39,8 +40,10 @@ SERVICES = [
     ("systemd-resolved", "Network Name Resolution", 9), ("dbus", "D-Bus System Message Bus", 5),
     ("polkit", "Authorization Manager", 11), ("smartmontools", "Self Monitoring and Reporting", 4),
     ("avahi-daemon", "Avahi mDNS/DNS-SD Stack", 3), ("bluetooth", "Bluetooth service", 5), ("backup", "Nightly backup", 0),
-    ("photoprism", "PhotoPrism", 297),
+    ("photoprism", "PhotoPrism", 297), ("minecraft", "Minecraft server", 0),
 ]
+# Bewust uitgezet (systemctl disable --now): telt niet als probleem, staat in de app onder "Bewust uit".
+DISABLED_DEMO = {"minecraft"}
 
 FAILED_DEMO = "zigbee2mqtt"
 
@@ -53,7 +56,11 @@ PROJECTS = {
     "photos": ["photoprism", "mariadb"],
     "automation": ["n8n", "postgres", "mosquitto", "zigbee2mqtt"],
     "tools": ["portainer-agent", "docker-socket-proxy", "vaultwarden", "paperless"],
+    "old-blog": ["ghost", "mysql"],
 }
+# Met docker compose stop uitgezet: de container en zijn site blog.example.com tellen als bewust uit.
+STOPPED_PROJECT = "old-blog"
+BLOG_PORT = 2368
 BROKEN_CONTAINER = "automation-zigbee2mqtt-1"
 
 SITES = [
@@ -61,10 +68,10 @@ SITES = [
     ("media.example.com", "http://127.0.0.1:8096"), ("grafana.example.com", "http://127.0.0.1:3000"),
     ("status.example.com", "http://127.0.0.1:3001"), ("photos.example.com", "http://127.0.0.1:2342"),
     ("n8n.example.com", "http://127.0.0.1:5678"), ("vault.example.com", "http://127.0.0.1:8222"),
-    ("pi-api.example.com", "http://127.0.0.1:8120"),
+    ("pi-api.example.com", "http://127.0.0.1:8120"), ("blog.example.com", f"http://127.0.0.1:{BLOG_PORT}"),
 ]
 DOWN_SITE = "n8n.example.com"
-CUSTOM = {"home-assistant", "pihole-FTL", "nextcloud-cron", "jellyfin", "mosquitto", "zigbee2mqtt", "grafana-server", "prometheus", "uptime-kuma", "syncthing@pi", "hal-agent", "backup", "photoprism"}
+CUSTOM = {"home-assistant", "pihole-FTL", "nextcloud-cron", "jellyfin", "mosquitto", "zigbee2mqtt", "grafana-server", "prometheus", "uptime-kuma", "syncthing@pi", "hal-agent", "backup", "photoprism", "minecraft"}
 HOSTNAME = "homelab-pi"
 
 
@@ -91,6 +98,7 @@ class MockBackend:
         self._net = (0.0, 0.0)
         self.fixed_containers: set[str] = set()
         self.events_store = EventStore(settings.state_dir / "events.db", debounce=False)
+        self.labels = Labels(self.config.groups, LabelStore(settings.state_dir / "labels.json"))
         self.last_upgrade: dict[str, Any] | None = None
         self.apt_packages = [] if self.scenario == "ok" else [
             {"name": "openssl", "from": "3.5.1-1", "to": "3.5.1-1+deb13u1", "security": True},
@@ -232,13 +240,15 @@ class MockBackend:
         for i, (name, desc, mem_mb) in enumerate(SERVICES):
             unit = f"{name}.service"
             failed = name in self.failed_services
+            off = name in DISABLED_DEMO
             oneshot = name in ("backup", "ufw", "nextcloud-cron")
+            idle = off or name in ("backup", "nextcloud-cron")
             out.append({
                 "name": unit, "description": desc, "custom": name in CUSTOM,
-                "active": "failed" if failed else ("inactive" if name in ("backup", "nextcloud-cron") else "active"),
-                "sub": "failed" if failed else ("dead" if name in ("backup", "nextcloud-cron") else ("exited" if oneshot else "running")),
-                "enabled": "enabled", "uptime_seconds": None if failed else int(time.time() - self.boot - i * 97),
-                "memory_bytes": mem_mb * 1024 * 1024 if mem_mb else None, "main_pid": None if failed else 800 + i * 37,
+                "active": "failed" if failed else ("inactive" if idle else "active"),
+                "sub": "failed" if failed else ("dead" if idle else ("exited" if oneshot else "running")),
+                "enabled": "disabled" if off else "enabled", "uptime_seconds": None if failed or idle else int(time.time() - self.boot - i * 97),
+                "memory_bytes": mem_mb * 1024 * 1024 if mem_mb else None, "main_pid": None if failed or idle else 800 + i * 37,
                 "restarts": 3 if failed else (1 if i % 11 == 0 else 0),
                 "restart_allowed": unit in allowed,
             })
@@ -251,6 +261,15 @@ class MockBackend:
                 n += 1
                 name = f"{proj}-{s}-1"
                 stopped = self.scenario != "ok" and name == BROKEN_CONTAINER and name not in self.fixed_containers
+                if proj == STOPPED_PROJECT:
+                    port = BLOG_PORT if s == "ghost" else None
+                    out.append({
+                        "id": f"{n:02x}c0ffee{n:04x}"[:12], "name": name, "image": "ghost:5-alpine" if s == "ghost" else "mysql:8.4",
+                        "state": "exited", "status": "Exited (0) 9 days ago", "created": int(self.boot), "project": proj, "service": s,
+                        "ports": [], "host_ports": [port] if port else [], "restart_count": 0, "health": "geen", "last_health": "healthy" if s == "mysql" else None,
+                        "exit_code": 0, "oom_killed": False, "restart_policy": "unless-stopped", "memory_limit": 8 * GB,
+                    })
+                    continue
                 out.append({
                     "id": f"{n:02x}c0ffee{n:04x}"[:12], "name": name,
                     "image": {"postgres": "postgres:16-alpine", "redis": "redis:7-alpine"}.get(s, f"ghcr.io/example/{s}:latest"),
@@ -258,6 +277,7 @@ class MockBackend:
                     "status": "Exited (1) 14 minutes ago" if stopped else f"Up {3 + n % 9} days",
                     "created": int(self.boot), "project": proj, "service": s,
                     "ports": [{"private": 8000 + n, "public": 8000 + n, "ip": "127.0.0.1", "type": "tcp"}] if s in ("web", "api", "dashboard", "factory") else [],
+                    "host_ports": [8000 + n] if s in ("web", "api", "dashboard", "factory") else [],
                     "restart_count": 5 if stopped else (1 if n % 13 == 0 else 0),
                     "health": "unhealthy" if stopped else ("healthy" if s in ("api", "postgres", "web") else "geen"),
                     "exit_code": 1 if stopped else 0, "oom_killed": False, "restart_policy": "unless-stopped",
@@ -270,11 +290,11 @@ class MockBackend:
         now = int(time.time())
         out = []
         for i, (host, local) in enumerate(SITES):
-            down = self.scenario != "ok" and host == DOWN_SITE
+            down = (self.scenario != "ok" and host == DOWN_SITE) or host == "blog.example.com"
             protected = host in ("vault.example.com", "pi-api.example.com")
             lat = self._metric_value(f"site.{host}.latency", now)
             out.append({
-                "hostname": host, "url": f"https://{host}/", "local": local, "source": "home" if i < 5 else ("tunnel-apps" if i < 8 else "sites.yml"),
+                "hostname": host, "url": f"https://{host}/", "local": local, "source": "home" if i < 5 else ("tunnel-apps" if i < 8 or i == 9 else "sites.yml"),
                 "status_code": 502 if down else (302 if protected else 200), "latency_ms": None if down else lat,
                 "state": "down" if down else ("protected" if protected else "up"),
                 "tls_expires_at": now + (61 - i * 3) * 86400, "tls_days_left": 61 - i * 3,
@@ -301,16 +321,42 @@ class MockBackend:
                 for n, d in (("db-backup", "Nightly database dump"), ("offsite-backup", "Encrypted offsite copy"))}
         return build(timers, show, 36 * 3600, now) + classify_backups(items, self.config.backup_policy())
 
+    def _all(self, with_groups: bool = True):
+        """Diensten, containers en sites met bewust uit en categorie (zie labels.py)."""
+        return self.labels.annotate(self._services(), self._containers(), self._sites(), None, None, with_groups)
+
+    def labels_info(self) -> dict[str, Any]:
+        cfg = self.labels.settings()
+        return {"groups": self.labels.group_names(), "auto_parked": cfg["auto_parked"], "editable": self.config.allow("labels")}
+
+    async def labels_set(self, kind: str, name: str, changes: dict[str, Any]) -> dict[str, Any]:
+        if kind not in KINDS:
+            raise api_error(422, "invalid_input", "Ongeldige invoer")
+        if not self.config.allow("labels"):
+            raise api_error(403, "forbidden", L("Categorieën en bewust uit staan uit in allowed-actions.yml", "Categories and switched off are disabled in allowed-actions.yml"))
+        known = ({s["name"] for s in self._services()} if kind == "service" else {c["name"] for c in self._containers()} if kind == "container"
+                 else {s["hostname"] for s in self._sites()})
+        if name not in known:
+            raise api_error(404, "not_found", L("Onbekend item", "Unknown item"))
+        if "group" in changes:
+            try:
+                changes["group"] = self.labels.validate_group(changes["group"])
+            except ValueError:
+                raise api_error(422, "invalid_input", "Ongeldige invoer")
+        entry = self.labels.store.set(kind, name, changes)
+        return {"ok": True, "kind": kind, "name": name, "parked_setting": entry.get("parked"), "group_setting": entry.get("group")}
+
     # API ---------------------------------------------------------------------
 
     def info(self) -> dict[str, Any]:
         return {"hostname": HOSTNAME, "confirm_name": self.settings.hostname_confirm or HOSTNAME, "mock": True, "gpio_available": True,
                 "shell_url": self.settings.shell_url or "http://127.0.0.1:8121", "access_configured": False,
-                "scenario": self.scenario, "features": ["events", "updates", "agent_update", "container_restart"]}
+                "scenario": self.scenario, "features": ["events", "updates", "agent_update", "container_restart", "labels"]}
 
     async def overview(self) -> dict[str, Any]:
         snap, m, smart = self._snapshot(), self._mounts(), self._smart()
-        services, containers, sites, backups = self._services(), self._containers(), self._sites(), self._backups()
+        services, containers, sites = self._all(with_groups=False)
+        backups = self._backups()
         return {
             "ts": int(time.time()),
             "health": compute_health(snap, m, smart, services, containers, sites, backups),
@@ -352,10 +398,12 @@ class MockBackend:
 
     async def services(self, filt: str, q: str | None) -> list[dict[str, Any]]:
         out = []
-        for s in self._services():
+        for s in self._all()[0]:
             if filt == "custom" and not s.get("custom"):
                 continue
-            if filt == "failed" and s["active"] != "failed":
+            if filt == "failed" and (s["active"] != "failed" or s["parked"]):
+                continue
+            if filt == "parked" and not s["parked"]:
                 continue
             if filt == "active" and s["active"] != "active":
                 continue
@@ -380,7 +428,7 @@ class MockBackend:
 
     def containers(self) -> dict[str, Any]:
         deny = self.config.container_restart_allowed
-        return {"containers": [{**c, "restart_allowed": deny(c["name"])} for c in self._containers()], "updated_at": int(time.time()) - 12, "error": None}
+        return {"containers": [{**c, "restart_allowed": deny(c["name"])} for c in self._all()[1]], "updated_at": int(time.time()) - 12, "error": None}
 
     # Onderhoud ---------------------------------------------------------------
 
@@ -389,10 +437,12 @@ class MockBackend:
                 "security_count": sum(1 for p in self.apt_packages if p["security"]), "packages": self.apt_packages, "reboot_required": False, "error": None, "last_upgrade": self.last_upgrade}
 
     def _conditions(self) -> dict[str, dict[str, Any]]:
-        return conditions(self._smart(), self._services(), self._containers(), self._sites(), self._apt())
+        svc, ctr, sts = self._all(with_groups=False)
+        return conditions(self._smart(), svc, ctr, sts, self._apt())
 
     def events(self, since: int, limit: int) -> dict[str, Any]:
-        self.events_store.sync(self._conditions())
+        svc, ctr, sts = self._all(with_groups=False)
+        self.events_store.sync(self._conditions(), parked=parked_keys(svc, ctr, sts))
         return self.events_store.list(since, limit)
 
     async def updates(self) -> dict[str, Any]:
@@ -465,9 +515,9 @@ class MockBackend:
                 for i in range(lines)]
 
     def sites(self) -> dict[str, Any]:
-        return {"sites": self._sites(), "updated_at": int(time.time()) - 20,
+        return {"sites": self._all()[2], "updated_at": int(time.time()) - 20,
                 "discovery": {"enabled": True, "generated_at": int(time.time()) - 240, "excluded": 0,
-                              "sources": [{"label": "home", "kind": "tunnel", "count": 5}, {"label": "tunnel-apps", "kind": "tunnel", "count": 3}],
+                              "sources": [{"label": "home", "kind": "tunnel", "count": 5}, {"label": "tunnel-apps", "kind": "tunnel", "count": 4}],
                               "remote_tunnels": ["cloudflared-remote"] if self.scenario != "ok" else []}}
 
     def processes(self, sort: str, limit: int, q: str | None) -> list[dict[str, Any]]:

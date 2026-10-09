@@ -37,7 +37,7 @@ Everything runs directly between your phone and your own Pi. There is no cloud o
 | **Overview** | Health status with reasons, CPU, RAM, temperature, fan, load, network, disk I/O, throttling, uptime |
 | **Statistics** | Every metric stored for 30 days (10 s, 1 min and 5 min resolution), charts per group, fullscreen with scrubbing, CSV export |
 | **Disk health** | SMART per disk with the attributes that actually predict failure, a red banner on every screen when a disk starts failing |
-| **System** | systemd services with logs and restart, Docker containers, your websites with latency and TLS expiry, processes |
+| **System** | systemd services with logs and restart, Docker containers, your websites with latency and TLS expiry, processes. Grouped in categories, and what you switched off on purpose is listed apart and never counts as a problem |
 | **Hardware** | GPIO header with safe switching and pulses, 1-wire, DHT and BMP280 sensors, Wake-on-LAN, pinout reference |
 | **Admin mode** | Terminal with multiple tabs and snippets, file manager with editor, upload and download. Off by default, stops by itself |
 | **Actions** | Your own commands, restart services and containers, power off, all with hold-to-confirm and an audit log |

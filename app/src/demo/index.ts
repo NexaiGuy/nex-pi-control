@@ -226,6 +226,10 @@ export async function demoRequest(target: 'api' | 'shell', path: string, method:
     return action(nlang ? 'Beheermodus gestopt (demo)' : 'Admin mode stopped (demo)');
   }
   if (path === '/v1/disks/acknowledge-crc') return action('Demo');
+  if (path === '/v1/labels' && method !== 'GET') {
+    const b = (body ?? {}) as Json;
+    return action(nlang ? 'Demo: niets gewijzigd' : 'Demo: nothing changed', { kind: b.kind, name: b.name, parked_setting: null, group_setting: null });
+  }
   if (path === '/v1/containers' && method === 'GET') return shift(demoContainers(), offset);
   if (/^\/v1\/containers\/[^/]+\/restart$/.test(path)) {
     const ref = decodeURIComponent(path.split('/')[3] ?? '');

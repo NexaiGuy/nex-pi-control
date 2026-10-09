@@ -43,7 +43,7 @@ def test_site_with_404_everywhere_stays_warning_and_is_reported(monkeypatch):
     assert [r["code"] for r in h["reasons"]] == ["sites_error"]
     assert "kapot.example.be (404)" in h["reasons"][0]["text"]
     c = counts([], [], [res, {"hostname": "ok.be", "state": "up"}], [])["sites"]
-    assert c == {"up": 1, "down": 0, "warning": 1, "total": 2}
+    assert c == {"up": 1, "down": 0, "warning": 1, "total": 2, "parked": 0, "all": 2}
     ev = conditions([], [], [], [res], None)
     assert ev["site:kapot.example.be"]["level"] == "warning"
 

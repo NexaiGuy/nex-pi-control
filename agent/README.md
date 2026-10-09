@@ -61,16 +61,29 @@ Connection guides: [Tailscale](../docs/connect-tailscale.md), [home network](../
 |---|---|
 | `agent.env` | agent token, optional Cloudflare Access team domain and AUD, `HAL_ALLOW_LAN` |
 | `shell.env` | shell token, optional AUD for the shell, idle timeout |
-| `allowed-actions.yml` | which services may be restarted, reboot and power off, container restarts (`containers`, `container_deny`), system updates (`updates`) and agent updates (`agent_update`). All on by default |
+| `allowed-actions.yml` | which services may be restarted, reboot and power off, container restarts (`containers`, `container_deny`), system updates (`updates`), agent updates (`agent_update`) and setting categories and "switched off" from the app (`labels`). All on by default |
 | `commands.yml` | your own commands (the app only ever sends the id) |
 | `gpio.yml` | switchable pins and their names |
 | `sensors.yml` | DS18B20, DHT (kernel driver), BMP280 |
 | `wol.yml` | Wake-on-LAN devices |
 | `shell-roots.yml` | folders for the file manager (read only or read write) |
 | `sites.yml` | extra hostnames, health check paths and `exclude`. Hostnames from your cloudflared configs are found automatically every 10 minutes by `hal-sites-discover` (read only) |
+| `groups.yml` | categories for services, containers and sites, and what is switched off on purpose (see below) |
 | `ports.md` | port registry shown in the app |
 
-The agent reloads `sensors.yml`, `sites.yml`, `gpio.yml` and `wol.yml` automatically. For `allowed-actions.yml` and `commands.yml` run `hal-apply-config`, because those also regenerate the polkit rule.
+The agent reloads `sensors.yml`, `sites.yml`, `gpio.yml`, `wol.yml` and `groups.yml` automatically. For `allowed-actions.yml` and `commands.yml` run `hal-apply-config`, because those also regenerate the polkit rule.
+
+### Switched off on purpose and categories
+
+Something you stopped on purpose is not a problem. Since agent 1.3.0 it does not count in the status, sends no notification and is listed separately under "Switched off" in the app. The agent recognises it by itself:
+
+- a service that is not running and disabled (`systemctl disable --now`)
+- a container that exited with code 0, or with 130, 137 or 143 (the signal from `docker stop` or `docker compose stop`) while its restart policy is `always` or `unless-stopped`. Any other exit code, or an OOM kill, is a crash and stays a problem
+- a site that is unreachable while its backend is switched off: the cloudflared container that serves it, the container that publishes its port, or a service that has that port in its unit file or in the port registry
+
+For anything else, open it in the app and turn on "Switched off on purpose", or list it under `parked:` in `groups.yml`. It only counts while it is not running: start it again and it is monitored as usual.
+
+Services, containers and sites are grouped in categories. Without configuration services are split in your own services and system services, containers follow their compose project and sites their domain. Set your own categories in `groups.yml` (glob patterns, first match wins) or per item in the app. What you set in the app is stored in `/var/lib/hal-agent/labels.json` and always wins over `groups.yml`.
 
 ## Security model
 

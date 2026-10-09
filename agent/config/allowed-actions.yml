@@ -23,3 +23,6 @@ updates: true
 
 # Update this agent from the app to the newest GitHub release, with automatic rollback
 agent_update: true
+
+# Set categories and "switched off on purpose" from the app (stored in /var/lib/hal-agent/labels.json, see groups.yml)
+labels: true

@@ -48,18 +48,29 @@ const SAMSUNG_XML = `<?xml version="1.0" encoding="utf-8"?>
 `;
 
 // Eigen ontvanger: dezelfde als die van react-native-android-widget, maar zonder JS-taak al meteen iets op het
-// cover-scherm (het logo) als de widget nog nooit cijfers toonde. Zo is het vak nooit leeg.
+// cover-scherm (het logo) als de widget nog nooit cijfers toonde. Zo is het vak nooit leeg. Een tik op de widget
+// (CoverScreen.ACTION_REPLAY) speelt het intro opnieuw en vraagt verse cijfers.
 function providerJava(pkg, name) {
   return `package ${pkg}.widget;
 
 import android.appwidget.AppWidgetManager;
 import android.content.Context;
+import android.content.Intent;
 
 import be.nexai.widgetlive.CoverScreen;
 import com.reactnativeandroidwidget.RNWidgetProvider;
 
 // Gemaakt door plugins/withFlexWindow.js (Flex Window, cover-scherm van de Galaxy Z Flip).
 public class ${name} extends RNWidgetProvider {
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        if (intent != null && CoverScreen.ACTION_REPLAY.equals(intent.getAction())) {
+            CoverScreen.INSTANCE.replay(context);
+            return;
+        }
+        super.onReceive(context, intent);
+    }
+
     @Override
     public void onUpdate(Context context, AppWidgetManager appWidgetManager, int[] appWidgetIds) {
         CoverScreen.INSTANCE.paintIfEmpty(context);

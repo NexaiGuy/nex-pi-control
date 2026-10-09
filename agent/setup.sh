@@ -188,7 +188,7 @@ chown root:"$SHELL_GROUP" "$ETC/shell.env"; chmod 0640 "$ETC/shell.env"
 c_ok "Tokens stored in $ETC (not readable by other users)"
 
 # 7. Configuration ---------------------------------------------------------------------------------------
-for f in allowed-actions.yml commands.yml wol.yml gpio.yml sensors.yml shell-roots.yml; do
+for f in allowed-actions.yml commands.yml wol.yml gpio.yml sensors.yml shell-roots.yml backups.yml groups.yml; do
   if [[ ! -f "$ETC/$f" ]]; then
     install -o root -g halagent -m 0640 "$SRC/config/$f" "$ETC/$f"
     c_info "Example $f installed"
@@ -196,8 +196,8 @@ for f in allowed-actions.yml commands.yml wol.yml gpio.yml sensors.yml shell-roo
     [[ "$f" == shell-roots.yml ]] && sed -i "s#path: /home/pi#path: $SHELL_HOME#" "$ETC/$f"
   fi
 done
-chown root:halagent "$ETC"/{allowed-actions,commands,wol,gpio,sensors}.yml
-chmod 0640 "$ETC"/{allowed-actions,commands,wol,gpio,sensors}.yml
+chown root:halagent "$ETC"/{allowed-actions,commands,wol,gpio,sensors,backups,groups}.yml
+chmod 0640 "$ETC"/{allowed-actions,commands,wol,gpio,sensors,backups,groups}.yml
 chown root:"$SHELL_GROUP" "$ETC/shell-roots.yml"; chmod 0640 "$ETC/shell-roots.yml"
 
 if [[ ! -f "$ETC/sites.yml" ]]; then

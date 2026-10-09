@@ -17,7 +17,8 @@ const SERVICE = 'be.nexai.widgetlive.WidgetLiveService';
 const RECEIVER = 'be.nexai.widgetlive.WidgetLiveBootReceiver';
 
 function withWidgetLive(config, props = {}) {
-  const enabled = props.enabled !== false;
+  // Play-build (scripts/install-usb.sh --aab zet NEX_PLAY_BUILD=1): altijd uit, dan is er geen verklaring voor voorgronddiensten nodig.
+  const enabled = props.enabled !== false && process.env.NEX_PLAY_BUILD !== '1';
   config.android = config.android ?? {};
   if (enabled) {
     config.android.permissions = [...new Set([...(config.android.permissions ?? []), ...PERMISSIONS])];

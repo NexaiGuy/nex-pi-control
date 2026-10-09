@@ -403,16 +403,18 @@ function swapLevel(c: Ctx): string {
 
 /** Zoals in de app: "protected" (achter Cloudflare Access, 401/403) is in orde. */
 function siteLevel(s: Site): string {
+  if (s.parked) return 'offline'; // bewust uit (agent 1.3.0+): grijs, nooit een probleem
   return s.state === 'down' ? 'critical' : s.state === 'warning' ? 'warning' : 'ok';
 }
 const SITE_RANK: Record<Site['state'], number> = { down: 0, warning: 1, protected: 2, up: 2 };
-/** Problemen eerst, daarna de traagste. */
+const siteRank = (s: Site) => (s.parked ? 3 : SITE_RANK[s.state]);
+/** Problemen eerst, daarna de traagste. Bewust uit achteraan. */
 function worstSites(list: Site[] | undefined): Site[] {
-  return [...(list ?? [])].sort((a, b) => SITE_RANK[a.state] - SITE_RANK[b.state] || (b.latency_ms ?? 0) - (a.latency_ms ?? 0));
+  return [...(list ?? [])].sort((a, b) => siteRank(a) - siteRank(b) || (b.latency_ms ?? 0) - (a.latency_ms ?? 0));
 }
-/** Volledige lijst: problemen eerst, daarna alfabetisch. */
+/** Volledige lijst: problemen eerst, daarna alfabetisch. Bewust uit achteraan. */
 function allSites(list: Site[] | undefined): Site[] {
-  return [...(list ?? [])].sort((a, b) => SITE_RANK[a.state] - SITE_RANK[b.state] || a.hostname.localeCompare(b.hostname));
+  return [...(list ?? [])].sort((a, b) => siteRank(a) - siteRank(b) || a.hostname.localeCompare(b.hostname));
 }
 
 function openEvents(list: AgentEvent[] | undefined): AgentEvent[] {
@@ -676,15 +678,15 @@ function Empty({ c, text }: { c: Ctx; text: string }) {
 function Sites(c: Ctx) {
   const k = c.o?.counts.sites;
   const list = c.snap.extras.sites;
-  const down = k?.down ?? list?.filter((s) => s.state === 'down').length ?? 0;
-  const warning = k?.warning ?? list?.filter((s) => s.state === 'warning').length ?? 0;
+  const down = k?.down ?? list?.filter((s) => s.state === 'down' && !s.parked).length ?? 0;
+  const warning = k?.warning ?? list?.filter((s) => s.state === 'warning' && !s.parked).length ?? 0;
   const rows: Row[] = allSites(list).map((s) => ({
       key: s.hostname,
       lv: siteLevel(s),
       name: s.hostname,
       route: `/site/${encodeURIComponent(s.hostname)}`,
       cols: [
-        { text: s.status_code ? String(s.status_code) : F.NONE, w: 28, ink: s.state === 'down' || s.state === 'warning' },
+        { text: s.status_code ? String(s.status_code) : F.NONE, w: 28, ink: !s.parked && (s.state === 'down' || s.state === 'warning') },
         { text: s.latency_ms !== null && s.latency_ms !== undefined ? `${F.int(s.latency_ms)} ms` : 'n/a', w: 48 },
         { text: s.tls_days_left !== undefined ? `TLS ${s.tls_days_left} ${c.s.day}` : '', w: 58 },
       ],
@@ -704,7 +706,9 @@ function Sites(c: Ctx) {
 }
 
 function containerLevel(x: Container): string {
-  if (x.health === 'unhealthy' || x.state === 'restarting' || x.oom_killed) return 'warning';
+  if (x.parked) return 'offline'; // bewust uit (agent 1.3.0+)
+  const running = x.state === 'running' || x.state === 'restarting';
+  if ((x.health === 'unhealthy' && running) || x.state === 'restarting' || x.oom_killed) return 'warning';
   if (x.state !== 'running') return 'warning';
   return 'ok';
 }
@@ -712,16 +716,16 @@ function containerLevel(x: Container): string {
 function Containers(c: Ctx) {
   const k = c.o?.counts.containers;
   const list = c.snap.extras.containers ?? [];
-  const unhealthy = list.filter((x) => x.health === 'unhealthy').length;
+  const unhealthy = list.filter((x) => x.health === 'unhealthy' && x.state === 'running' && !x.parked).length;
   const sorted = [...list].sort((a, b) => {
-    const r = (x: Container) => (containerLevel(x) === 'ok' ? 1 : 0);
+    const r = (x: Container) => (containerLevel(x) === 'offline' ? 2 : containerLevel(x) === 'ok' ? 1 : 0);
     return r(a) - r(b) || (b.cpu_percent ?? 0) - (a.cpu_percent ?? 0);
   });
   const rows: Row[] = sorted.map((x) => ({
     key: x.id,
     lv: containerLevel(x),
     route: `/container/${encodeURIComponent(x.id)}`,
-    hi: containerLevel(x) !== 'ok',
+    hi: containerLevel(x) !== 'ok' && containerLevel(x) !== 'offline',
     name: x.name,
     cols: [
       { text: x.cpu_percent !== undefined ? `${F.pct(x.cpu_percent)} %` : F.NONE, w: 46, ink: true },

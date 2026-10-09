@@ -39,6 +39,10 @@ import org.json.JSONObject
  *     [renderData] (nex_cover_data.xml).
  *
  * Zolang het cover-scherm aan blijft, ververst de widget elke [REFRESH_MS].
+ *
+ * Tik op de widget: hetzelfde intro opnieuw (logo, draaiende behuizing) en daarna verse cijfers. Android meldt een
+ * widget niet wanneer zijn pagina in beeld komt, dus zo start je het intro zelf als je naar de widget veegt. De
+ * onderste regel (toestel en agent) opent het volledige cover-scherm van de app.
  */
 object CoverScreen {
   private const val TAG = "WidgetLive"
@@ -52,6 +56,9 @@ object CoverScreen {
   /** Vangnet: tekenen de cijfers niet (taak niet gestart), dan na zo lang nog eens vragen. */
   const val SAFETY_MS = 6_000L
   const val REFRESH_MS = 15_000L
+
+  /** Tik op de widget: intro opnieuw. Gaat naar de ontvanger PiCover (plugins/withFlexWindow.js). */
+  const val ACTION_REPLAY = "be.nexai.widgetlive.COVER_REPLAY"
 
   private const val KEY_UNTIL = "cover_intro_until"
   private const val KEY_CAPTION = "cover_caption"
@@ -160,6 +167,20 @@ object CoverScreen {
     WidgetLiveService.prefs(ctx).edit().putLong(KEY_UNTIL, 0L).apply()
   }
 
+  /**
+   * Tik op de widget: logo, draaiende behuizing en dan verse cijfers. Loopt het intro al, dan doet een tik niets,
+   * zodat een dubbele tik het niet steeds herstart.
+   */
+  fun replay(ctx: Context) {
+    val app = ctx.applicationContext
+    if (introUntil(app) > System.currentTimeMillis()) return
+    if (!playIntro(app)) return
+    val gen = introGen
+    requestUpdate(app)
+    // Vangnet zoals bij het aangaan: tekende de JS-taak niets, dan na het intro nog eens vragen.
+    main.postDelayed({ if (gen == introGen) requestUpdate(app) }, LOGO_MS + SPIN_MIN_MS + SAFETY_MS)
+  }
+
   private fun showSpinner(ctx: Context) {
     val ids = ids(ctx)
     if (ids.isEmpty()) return
@@ -221,16 +242,17 @@ object CoverScreen {
       val value = if (m.optBoolean("dim")) MUTED else INK
       val v = RemoteViews(ctx.packageName, R.layout.nex_cover_data)
 
-      val alarm = m.optString("alarm", "")
-      if (alarm.isNotEmpty()) {
+      // Geen alarm komt als JSON null; optString maakt daar de tekst "null" van. Daarom overal str().
+      val alarm = m.str("alarm")
+      if (alarm.isNotBlank()) {
         v.setViewVisibility(R.id.nex_cover_header, View.GONE)
         v.setViewVisibility(R.id.nex_cover_alarm, View.VISIBLE)
         v.setTextViewText(R.id.nex_cover_alarm, "◆  $alarm")
       } else {
-        v.setTextColor(R.id.nex_cover_dot, levelColor(m.optString("level")))
-        v.setTextViewText(R.id.nex_cover_status, m.optString("status"))
-        v.setTextViewText(R.id.nex_cover_server, m.optString("server"))
-        v.setTextViewText(R.id.nex_cover_time, m.optString("time"))
+        v.setTextColor(R.id.nex_cover_dot, levelColor(m.str("level")))
+        v.setTextViewText(R.id.nex_cover_status, m.str("status"))
+        v.setTextViewText(R.id.nex_cover_server, m.str("server"))
+        v.setTextViewText(R.id.nex_cover_time, m.str("time"))
       }
 
       val reasons = m.optJSONArray("reasons")
@@ -241,8 +263,8 @@ object CoverScreen {
           if (sb.isNotEmpty()) sb.append('\n')
           val start = sb.length
           sb.append("◆ ")
-          sb.setSpan(ForegroundColorSpan(levelColor(r.optString("level"))), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-          sb.append(r.optString("text"))
+          sb.setSpan(ForegroundColorSpan(levelColor(r.str("level"))), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+          sb.append(r.str("text"))
         }
         v.setTextViewText(R.id.nex_cover_reasons, sb)
         v.setViewVisibility(R.id.nex_cover_reasons, View.VISIBLE)
@@ -263,13 +285,13 @@ object CoverScreen {
       val counts = m.optJSONArray("counts")
       for (i in 0 until 4) {
         val c = counts?.optJSONObject(i)
-        v.setTextColor(COUNTS[i * 3], levelColor(c?.optString("level")))
-        v.setTextViewText(COUNTS[i * 3 + 1], c?.optString("label") ?: "")
-        v.setTextViewText(COUNTS[i * 3 + 2], c?.optString("value") ?: "·")
+        v.setTextColor(COUNTS[i * 3], levelColor(c?.str("level")))
+        v.setTextViewText(COUNTS[i * 3 + 1], c?.str("label") ?: "")
+        v.setTextViewText(COUNTS[i * 3 + 2], c?.str("value")?.takeIf { it.isNotEmpty() } ?: "·")
         v.setTextColor(COUNTS[i * 3 + 2], value)
       }
-      v.setTextViewText(R.id.nex_cover_foot, m.optString("foot"))
-      push(ctx, ids, v)
+      v.setTextViewText(R.id.nex_cover_foot, m.str("foot"))
+      push(ctx, ids, v, foot = true)
       WidgetLiveService.prefs(ctx).edit().putBoolean(KEY_DRAWN, true).apply()
       true
     } catch (e: Exception) {
@@ -282,8 +304,8 @@ object CoverScreen {
   private fun fillRows(v: RemoteViews, rows: JSONArray?, slots: IntArray, value: Int) {
     for (i in 0 until slots.size / 2) {
       val r = rows?.optJSONObject(i)
-      v.setTextViewText(slots[i * 2], r?.optString("label") ?: "")
-      v.setTextViewText(slots[i * 2 + 1], r?.optString("value") ?: "")
+      v.setTextViewText(slots[i * 2], r?.str("label") ?: "")
+      v.setTextViewText(slots[i * 2 + 1], r?.str("value") ?: "")
       v.setTextColor(slots[i * 2 + 1], value)
     }
   }
@@ -318,16 +340,26 @@ object CoverScreen {
     return bmp
   }
 
-  private fun push(ctx: Context, ids: IntArray, views: RemoteViews) {
+  /** Tekst uit het model; ontbreekt het veld of is het null, dan leeg (nooit de tekst "null"). */
+  private fun JSONObject.str(key: String): String = if (isNull(key)) "" else optString(key, "")
+
+  /** Tik op de widget: intro opnieuw. [foot]: de onderste regel opent de app (enkel in de cijfers-layout). */
+  private fun push(ctx: Context, ids: IntArray, views: RemoteViews, foot: Boolean = false) {
     try {
-      views.setOnClickPendingIntent(R.id.nex_cover_root, openCover(ctx))
+      views.setOnClickPendingIntent(R.id.nex_cover_root, replayIntent(ctx))
+      if (foot) views.setOnClickPendingIntent(R.id.nex_cover_foot, openCover(ctx))
       AppWidgetManager.getInstance(ctx).updateAppWidget(ids, views)
     } catch (e: Exception) {
       Log.w(TAG, "cover tekenen mislukt: ${e.message}")
     }
   }
 
-  /** Tik op de widget: het volledige cover-scherm van de app (nexpicontrol://cover). */
+  private fun replayIntent(ctx: Context): PendingIntent {
+    val i = Intent(ACTION_REPLAY).setComponent(provider(ctx))
+    return PendingIntent.getBroadcast(ctx, 22, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+  }
+
+  /** Tik op de onderste regel: het volledige cover-scherm van de app (nexpicontrol://cover). */
   private fun openCover(ctx: Context): PendingIntent {
     val i = Intent(Intent.ACTION_VIEW, Uri.parse("nexpicontrol://cover"))
       .setPackage(ctx.packageName)

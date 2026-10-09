@@ -4,6 +4,7 @@ import { Switch, View } from 'react-native';
 
 import { errorMessage } from '@/api/client';
 import { useRestartService, useServiceLogs, useServices } from '@/api/hooks';
+import { LabelCard } from '@/components/LabelCard';
 import { DetailScreen } from '@/components/layout';
 import { ConfirmSheet, ErrorState, LogView, SkeletonList, toast, type ConfirmSpec } from '@/components/overlays';
 import { Button, Card, KeyValue, Row, SectionTitle, StatusPill, T } from '@/components/primitives';
@@ -63,6 +64,7 @@ export default function ServiceDetail() {
           {t.system.notWhitelisted}
         </T>
       )}
+      <LabelCard kind="service" name={unit} item={s} />
       <SectionTitle
         right={
           <Row gap={space.sm}>

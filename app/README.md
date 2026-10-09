@@ -36,10 +36,11 @@ python scripts/export_demo.py ../app/src/demo     # demo data built into the app
 ```bash
 bash scripts/kali-bootstrap.sh     # once: JDK 17, Android SDK, adb, npm ci, upload keystore in ../keys
 bash scripts/install-usb.sh        # signed release APK, installed on your phone over USB
-bash scripts/install-usb.sh --aab  # Android App Bundle for Google Play, in ../releases
+bash scripts/install-usb.sh --aab  # Android App Bundle for Google Play, in ../releases (without floating icon and live widgets)
+bash scripts/install-usb.sh --aab --full  # same, with both (only once their foreground services are declared in Play)
 ```
 
-Builds run in `~/nex-pi-control-build`, a copy without spaces in the path (the NDK does not handle spaces). Signing comes from `../keys/signing.env` through `plugins/withReleaseSigning.js`; without it, release builds fall back to the debug key. Back up `../keys/`: it is your upload key for Google Play.
+Builds run in `~/nex-pi-control-build`, a copy without spaces in the path (the NDK does not handle spaces). Signing comes from `../keys/signing.env` through `plugins/withReleaseSigning.js`; without it, release builds fall back to the debug key. Back up `../keys/`: the same key signs the APK on the website and, through Play App Signing with your own key, the Play version. After an AAB build the script checks the signing certificate, targetSdk and the permissions Play would flag.
 
 Bump `expo.android.versionCode` in `app.json` for every upload to Google Play.
 

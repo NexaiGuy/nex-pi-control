@@ -99,11 +99,17 @@ export interface DiskAlarm {
   reasons: string[];
 }
 
+/** Sinds agent 1.3.0: `total` telt enkel wat bewaakt wordt, `parked` wat bewust uit staat, `all` alles samen. */
+interface CountExtra {
+  parked?: number;
+  all?: number;
+}
+
 export interface Counts {
-  services: { active: number; failed: number; total: number };
-  containers: { running: number; stopped: number; total: number };
+  services: { active: number; failed: number; total: number } & CountExtra;
+  containers: { running: number; stopped: number; total: number } & CountExtra;
   /** warning: antwoordt met een foutcode (4xx). Ontbreekt bij agents ouder dan 1.2.5. */
-  sites: { up: number; down: number; warning?: number; total: number };
+  sites: { up: number; down: number; warning?: number; total: number } & CountExtra;
   last_backup_age_seconds: number | null;
   /** Ontbreekt bij agents ouder dan 1.2.5. */
   backups?: { failed: number; old: number; total: number };
@@ -171,7 +177,41 @@ export interface Series extends MetricMeta {
   summary: { min: number | null; avg: number | null; max: number | null; current: number | null };
 }
 
-export interface Service {
+/** Waarom iets als bewust uit telt: in de app gezet, groups.yml, uitgeschakelde dienst, gestopte container, backend uit. */
+export type ParkedReason = 'app' | 'config' | 'disabled' | 'stopped' | 'backend';
+
+/** Sinds agent 1.3.0: bewust uit en categorie (zie agent/hal_agent/labels.py). Ontbreekt bij oudere agents. */
+export interface Labeled {
+  /** Staat nu bewust uit: telt niet als probleem, geeft geen melding. Enkel zolang het niet draait. */
+  parked?: boolean;
+  parked_reason?: ParkedReason | null;
+  /** Wat in de app ingesteld is: true = bewust uit, false = altijd bewaken, null = automatisch. */
+  parked_setting?: boolean | null;
+  /** Regel die het bewust uit maakt als het niet draait (groups.yml of automatisch), los van de app. */
+  parked_rule?: ParkedReason | null;
+  group?: string;
+  group_source?: 'app' | 'config' | 'auto';
+  /** Volgorde van de secties: eigen categorieën eerst, systeem achteraan. */
+  group_order?: number;
+}
+
+export type LabelKind = 'service' | 'container' | 'site';
+
+export interface LabelsInfo {
+  groups: { name: string; source: 'config' | 'app' }[];
+  auto_parked: boolean;
+  editable: boolean;
+}
+
+export interface LabelResult {
+  ok: boolean;
+  kind: LabelKind;
+  name: string;
+  parked_setting: boolean | null;
+  group_setting: string | null;
+}
+
+export interface Service extends Labeled {
   name: string;
   description: string;
   active: string;
@@ -191,7 +231,7 @@ export interface LogLine {
   message: string;
 }
 
-export interface Container {
+export interface Container extends Labeled {
   id: string;
   name: string;
   image: string;
@@ -211,6 +251,10 @@ export interface Container {
   memory_limit?: number | null;
   /** Sinds agent 1.2.0. */
   restart_allowed?: boolean;
+  /** Sinds agent 1.3.0: gepubliceerde poorten, ook als de container gestopt is. */
+  host_ports?: number[];
+  /** Sinds agent 1.3.0: laatste healthcheck van een gestopte container (health zelf is dan "geen"). */
+  last_health?: string | null;
 }
 
 export interface ContainersResponse {
@@ -219,7 +263,7 @@ export interface ContainersResponse {
   error: string | null;
 }
 
-export interface Site {
+export interface Site extends Labeled {
   hostname: string;
   url?: string;
   local?: string | null;

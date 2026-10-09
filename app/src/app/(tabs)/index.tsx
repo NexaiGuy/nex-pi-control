@@ -121,7 +121,11 @@ function Counts({ o }: { o: Overview }) {
   // Oudere agents sturen geen warning-telling: wat noch online noch offline is, heeft een foutcode.
   const siteErr = c.sites.warning ?? Math.max(0, c.sites.total - c.sites.up - c.sites.down);
   const siteLevel: Level = c.sites.down ? 'critical' : siteErr ? 'warning' : 'ok';
-  const siteSub = c.sites.down ? `${c.sites.down} ${t.overview.down}` : siteErr ? `${siteErr} ${t.overview.siteErrors}` : t.overview.up;
+  // Bewust uit (agent 1.3.0+) telt niet mee in total en is nooit een probleem: enkel vermelden als er verder niets is.
+  const off = (n: number | undefined) => (n ? `${n} ${t.labels.parkedShort}` : null);
+  const siteSub = c.sites.down ? `${c.sites.down} ${t.overview.down}` : siteErr ? `${siteErr} ${t.overview.siteErrors}` : off(c.sites.parked) ?? t.overview.up;
+  const svcSub = c.services.failed ? `${c.services.failed} ${t.overview.failed}` : off(c.services.parked) ?? `${c.services.total} ${t.overview.total}`;
+  const ctrSub = c.containers.stopped ? `${c.containers.stopped} ${t.overview.stopped}` : off(c.containers.parked) ?? t.overview.running;
   const bFailed = c.backups?.failed ?? 0;
   const bOld = c.backups?.old ?? 0;
   const age = c.last_backup_age_seconds;
@@ -132,8 +136,8 @@ function Counts({ o }: { o: Overview }) {
     : age > 36 * 3600 ? t.overview.tooOld : t.overview.agoShort;
   return (
     <View style={hs.countsGrid}>
-      <CountTile icon="server" label={t.overview.services} main={`${c.services.active}`} sub={c.services.failed ? `${c.services.failed} ${t.overview.failed}` : `${c.services.total} ${t.overview.total}`} level={c.services.failed ? 'warning' : 'ok'} onPress={() => router.push({ pathname: '/system', params: { seg: 'services' } })} />
-      <CountTile icon="box" label={t.overview.containers} main={`${c.containers.running}/${c.containers.total}`} sub={c.containers.stopped ? `${c.containers.stopped} ${t.overview.stopped}` : t.overview.running} level={c.containers.stopped ? 'warning' : 'ok'} onPress={() => router.push({ pathname: '/system', params: { seg: 'containers' } })} />
+      <CountTile icon="server" label={t.overview.services} main={`${c.services.active}`} sub={svcSub} level={c.services.failed ? 'warning' : 'ok'} onPress={() => router.push({ pathname: '/system', params: { seg: 'services' } })} />
+      <CountTile icon="box" label={t.overview.containers} main={`${c.containers.running}/${c.containers.total}`} sub={ctrSub} level={c.containers.stopped ? 'warning' : 'ok'} onPress={() => router.push({ pathname: '/system', params: { seg: 'containers' } })} />
       <CountTile icon="globe" label={t.overview.sites} main={`${c.sites.up}/${c.sites.total}`} sub={siteSub} level={siteLevel} onPress={() => router.push({ pathname: '/system', params: { seg: 'sites' } })} />
       <CountTile icon="archive" label={t.overview.backup} main={age === null ? '–' : duration(age, 1)} sub={backupSub} level={backupLevel} onPress={() => router.push('/backups')} />
     </View>

@@ -51,15 +51,19 @@ def conditions(smart: list[dict[str, Any]], services: list[dict[str, Any]], cont
             out[f"disk:{dev}"] = {"level": "critical", "kind": "disk",
                                   "title": T(f"Schijf {dev} toont tekenen van falen", f"Disk {dev} shows signs of failure"),
                                   "body": T(f"{first}. Maak eerst een back-up.", f"{first}. Back up first.")}
+    # Bewust uit (parked, zie labels.py): geen probleem, dus ook geen gebeurtenis of melding.
     for s in services:
-        if s.get("active") == "failed":
+        if s.get("active") == "failed" and not s.get("parked"):
             n = s["name"]
             out[f"service:{n}"] = {"level": "warning", "kind": "service",
                                    "title": T(f"Dienst {n} is gestopt met een fout", f"Service {n} failed"),
                                    "body": T("Bekijk de logs in de app.", "Check the logs in the app.")}
     for c in containers:
+        if c.get("parked"):
+            continue
         bad_exit = c.get("state") == "exited" and (c.get("exit_code") or 0) != 0
-        if bad_exit or c.get("health") == "unhealthy":
+        unhealthy = c.get("health") == "unhealthy" and c.get("state") in ("running", "restarting")
+        if bad_exit or unhealthy:
             n = c["name"]
             title = (T(f"Container {n} is gestopt met exitcode {c.get('exit_code')}", f"Container {n} exited with code {c.get('exit_code')}")
                      if bad_exit else T(f"Container {n} is ongezond", f"Container {n} is unhealthy"))
@@ -67,6 +71,8 @@ def conditions(smart: list[dict[str, Any]], services: list[dict[str, Any]], cont
                                      "title": title,
                                      "body": T("Je kan hem herstarten vanuit de app.", "You can restart it from the app.")}
     for st in sites:
+        if st.get("parked"):
+            continue
         if st.get("state") == "down":
             h = st["hostname"]
             out[f"site:{h}"] = {"level": "critical", "kind": "site",
@@ -113,11 +119,14 @@ class EventStore:
         self._db.execute("CREATE TABLE IF NOT EXISTS open (key TEXT PRIMARY KEY, event_id INTEGER NOT NULL)")
         self._db.commit()
 
-    def sync(self, current_conditions: dict[str, dict[str, Any]], now: int | None = None, unknown_kinds: set[str] | frozenset[str] = frozenset()) -> int:
+    def sync(self, current_conditions: dict[str, dict[str, Any]], now: int | None = None, unknown_kinds: set[str] | frozenset[str] = frozenset(),
+             parked: set[str] | frozenset[str] = frozenset()) -> int:
         """Vergelijkt met de open problemen. Geeft het aantal nieuwe gebeurtenissen terug.
 
         unknown_kinds: soorten waarvan de collector nu geen gegevens heeft (net gestart, Docker onbereikbaar). Hun open
         problemen blijven open; "geen gegevens" is niet hetzelfde als "opgelost".
+        parked: sleutels van wat nu bewust uit staat. Hun open problemen sluiten meteen, met "Bewust uit" in plaats van
+        "Opgelost" (de app haalt de melding dan weg zonder een nieuwe te tonen).
         """
         now = now or int(time.time())
         added = 0
@@ -143,9 +152,10 @@ class EventStore:
                 if key in current_conditions:
                     continue
                 row = self._db.execute("SELECT kind, data FROM events WHERE id=?", (event_id,)).fetchone()
-                if row and row[0] in unknown_kinds:
+                is_parked = key in parked
+                if row and row[0] in unknown_kinds and not is_parked:
                     continue
-                if row:
+                if row and not is_parked:
                     self._missed[key] = self._missed.get(key, 0) + 1
                     if self._missed[key] < self.clear_after.get(row[0], 1):
                         continue
@@ -155,12 +165,15 @@ class EventStore:
                     continue
                 kind, data = row[0], json.loads(row[1])
                 title = data.get("title") or {}
+                name = key.partition(":")[2] or key
+                payload = ({"title": T(f"Bewust uit: {name}", f"Switched off on purpose: {name}"),
+                            "body": T("Telt niet meer als probleem zolang het uit staat.", "No longer counts as a problem while it is off.")}
+                           if is_parked else
+                           {"title": T(f"Opgelost: {title.get('nl', key)}", f"Resolved: {title.get('en', key)}"),
+                            "body": T("Het probleem is niet meer aanwezig.", "The problem is gone.")})
                 self._db.execute(
                     "INSERT INTO events (ts, level, kind, key, resolved, data) VALUES (?,?,?,?,1,?)",
-                    (now, "ok", kind, key, json.dumps({
-                        "title": T(f"Opgelost: {title.get('nl', key)}", f"Resolved: {title.get('en', key)}"),
-                        "body": T("Het probleem is niet meer aanwezig.", "The problem is gone."),
-                    })),
+                    (now, "ok", kind, key, json.dumps(payload)),
                 )
                 added += 1
             self._db.execute("DELETE FROM events WHERE ts < ?", (now - 30 * 86400,))

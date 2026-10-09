@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "hal-agent",
-    "version": "1.2.0"
+    "version": "1.3.0"
   },
   "paths": {
     "/health": {
@@ -281,7 +281,8 @@
                 "all",
                 "custom",
                 "failed",
-                "active"
+                "active",
+                "parked"
               ],
               "type": "string",
               "default": "all",
@@ -491,6 +492,64 @@
                   "type": "object",
                   "additionalProperties": true,
                   "title": "Response Container Restart V1 Containers  Ref  Restart Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/labels": {
+      "get": {
+        "summary": "Labels",
+        "operationId": "labels_v1_labels_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Labels V1 Labels Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Labels Set",
+        "operationId": "labels_set_v1_labels_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LabelBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Labels Set V1 Labels Post"
                 }
               }
             }
@@ -1299,6 +1358,56 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "LabelBody": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "service",
+              "container",
+              "site"
+            ],
+            "title": "Kind"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 253,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "parked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parked"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "name"
+        ],
+        "title": "LabelBody",
+        "description": "Bewust uit en categorie van \u00e9\u00e9n dienst, container of site. Wat je weglaat, blijft zoals het was.\n\nparked: true = bewust uit, false = altijd bewaken, null = automatisch.\ngroup: naam van de categorie, null of \"\" = automatisch."
       },
       "PowerBody": {
         "properties": {

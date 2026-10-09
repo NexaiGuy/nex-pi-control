@@ -3,7 +3,10 @@
 # Gebruik:  bash scripts/install-usb.sh            (bouwen + installeren)
 #           bash scripts/install-usb.sh --clean    (native project volledig opnieuw genereren)
 #           bash scripts/install-usb.sh --no-build (enkel de laatste APK opnieuw installeren)
-#           bash scripts/install-usb.sh --aab      (Android App Bundle voor de Play Console, geen gsm nodig)
+#           bash scripts/install-usb.sh --aab      (Android App Bundle voor de Play Console, geen gsm nodig. Zonder zwevend
+#                                                   icoon en live widgets, dus geen verklaring voor voorgronddiensten nodig)
+#           bash scripts/install-usb.sh --aab --full  (App Bundle met zwevend icoon en live widgets: enkel als die in de
+#                                                   Play Console verklaard zijn, zie store/PLAY-CONSOLE.md stap 3b)
 set -euo pipefail
 
 APP_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -13,15 +16,23 @@ BUILD_ROOT="${HAL_BUILD_DIR:-$HOME/nex-pi-control-build}"
 BUILD="$BUILD_ROOT/app"
 SDK="${ANDROID_HOME:-$HOME/Android/Sdk}"
 PKG="be.nexai.picontrol"
-CLEAN=0; BUILD_IT=1; AAB=0
+CLEAN=0; BUILD_IT=1; AAB=0; FULL=0
 for a in "$@"; do
   case "$a" in
     --clean) CLEAN=1 ;;
     --no-build) BUILD_IT=0 ;;
     --aab) AAB=1 ;;
+    --full) FULL=1 ;;
     *) echo "Onbekende optie: $a" >&2; exit 2 ;;
   esac
 done
+
+# Smaak van de build: "play" (App Bundle zonder zwevend icoon en live widgets) of "full" (alles, zoals de APK op de site).
+FLAVOR=full
+if (( AAB )) && (( ! FULL )); then FLAVOR=play; fi
+if [[ "$FLAVOR" == play ]]; then export NEX_PLAY_BUILD=1; else unset NEX_PLAY_BUILD; fi
+# Certificaat van de release-sleutel (APK op nex-ai.be, en met eigen sleutel in Play App Signing ook de Play-versie).
+EXPECTED_CERT="f733da3416bb7d064d814e37e48a189c15ca59192e2bc57d7e2f4a89f3a0b067"
 
 ok()   { printf '\033[32mOK\033[0m   %s\n' "$*"; }
 info() { printf '\033[36m..\033[0m   %s\n' "$*"; }
@@ -45,12 +56,19 @@ prepare_build() {
     info "npm ci"
     npm ci --no-audit --no-fund
   fi
-  if (( CLEAN )) || [[ ! -d android ]] || [[ app.json -nt android/app/build.gradle ]] || [[ plugins/withReleaseSigning.js -nt android/app/build.gradle ]]; then
+  # Andere smaak dan de vorige build: native project volledig opnieuw, anders blijven permissies of diensten hangen.
+  if [[ -d android ]] && [[ "$(cat android/.nex-flavor 2>/dev/null || echo full)" != "$FLAVOR" ]]; then
+    info "Andere build-smaak ($FLAVOR): native project wordt volledig opnieuw gemaakt"
+    CLEAN=1
+  fi
+  if (( CLEAN )) || [[ ! -d android ]] || [[ app.json -nt android/app/build.gradle ]] \
+    || [[ -n "$(find plugins -type f -newer android/app/build.gradle -print -quit 2>/dev/null)" ]]; then
     info "Native Android-project genereren (expo prebuild)"
     PREBUILD_ARGS=(-p android --no-install)
     (( CLEAN )) && PREBUILD_ARGS+=(--clean)
     CI=1 npx expo prebuild "${PREBUILD_ARGS[@]}"
   fi
+  echo "$FLAVOR" > android/.nex-flavor
 }
 
 gradle_release() {
@@ -64,19 +82,59 @@ gradle_release() {
   unset HAL_KEYSTORE_PASSWORD HAL_KEY_PASSWORD
 }
 
+# Controle van de App Bundle voor Play: sleutel, targetSdk en permissies die een verklaring of afwijzing kosten.
+check_play_bundle() {
+  local aab="$1" kt cert man target p extra=""
+  local bad=()
+  kt="$(command -v keytool || echo "${JAVA_HOME:-/nonexistent}/bin/keytool")"
+  if [[ -x "$kt" ]]; then
+    cert="$("$kt" -printcert -jarfile "$aab" 2>/dev/null | awk '/SHA256:/ && !f {print $2; f=1}' | tr -d ':' | tr 'A-F' 'a-f' || true)"
+    [[ "$cert" == "$EXPECTED_CERT" ]] || die "Bundle is niet met de release-sleutel ondertekend (gevonden: ${cert:-geen}). Niet uploaden."
+    ok "Ondertekend met de release-sleutel (SHA-256 ${cert:0:8}...${cert: -4})"
+  else
+    printf '\033[33m!!\033[0m   %s\n' "keytool niet gevonden, handtekening niet gecontroleerd"
+  fi
+  man="$(find android/app/build/intermediates -path '*merged_manifest*' -path '*release*' -name AndroidManifest.xml -print -quit 2>/dev/null || true)"
+  if [[ -z "$man" ]]; then
+    printf '\033[33m!!\033[0m   %s\n' "Samengevoegd manifest niet gevonden, permissies niet gecontroleerd"
+    return 0
+  fi
+  target="$(grep -o -m1 'android:targetSdkVersion="[0-9]*"' "$man" | tr -dc '0-9' || true)"
+  if [[ -z "$target" ]]; then
+    printf '\033[33m!!\033[0m   %s\n' "targetSdk niet gevonden in het manifest, niet gecontroleerd"
+  elif (( target < 36 )); then
+    die "targetSdk $target: Google Play vraagt minstens 36"
+  fi
+  local forbidden=(READ_MEDIA_IMAGES READ_MEDIA_VIDEO QUERY_ALL_PACKAGES REQUEST_INSTALL_PACKAGES com.google.android.gms.permission.AD_ID)
+  if [[ "$FLAVOR" == play ]]; then forbidden+=(SYSTEM_ALERT_WINDOW FOREGROUND_SERVICE_SPECIAL_USE PACKAGE_USAGE_STATS); fi
+  for p in "${forbidden[@]}"; do
+    [[ "$p" == *.* ]] || p="android.permission.$p"
+    if grep -q "android:name=\"$p\"" "$man"; then bad+=("$p"); fi
+  done
+  (( ${#bad[@]} == 0 )) || die "Permissies die niet in deze Play-build horen: ${bad[*]} (manifest: $man)"
+  if [[ "$FLAVOR" == full ]]; then extra=", voorgronddiensten aanwezig (verklaring nodig)"; fi
+  ok "Manifest in orde: targetSdk ${target:-?}, geen permissies die een extra verklaring vragen$extra"
+}
+
 # 0. Enkel de App Bundle voor Google Play ---------------------------------------------------------
 if (( AAB )); then
   prepare_build
   VERSION="$(node -p "require('./app.json').expo.version")"
   VCODE="$(node -p "require('./app.json').expo.android.versionCode")"
-  info "App Bundle bouwen (versie $VERSION, versionCode $VCODE)"
+  info "App Bundle bouwen (versie $VERSION, versionCode $VCODE, smaak $FLAVOR)"
   gradle_release bundleRelease
   OUT_AAB="android/app/build/outputs/bundle/release/app-release.aab"
   [[ -f "$OUT_AAB" ]] || die "AAB niet gevonden na de build"
+  check_play_bundle "$OUT_AAB"
+  SUFFIX=""
+  if [[ "$FLAVOR" == full ]]; then SUFFIX="-full"; fi
   mkdir -p "$PROJECT/releases"
-  cp "$OUT_AAB" "$PROJECT/releases/nex-pi-control-$VERSION-$VCODE.aab"
-  ok "Klaar: releases/nex-pi-control-$VERSION-$VCODE.aab ($(du -h "$OUT_AAB" | cut -f1))"
+  cp "$OUT_AAB" "$PROJECT/releases/nex-pi-control-$VERSION-$VCODE$SUFFIX.aab"
+  ok "Klaar: releases/nex-pi-control-$VERSION-$VCODE$SUFFIX.aab ($(du -h "$OUT_AAB" | cut -f1))"
   echo "     Upload dit bestand in de Play Console. Verhoog android.versionCode in app.json voor elke nieuwe upload."
+  if [[ "$FLAVOR" == full ]]; then
+    echo "     Deze bundle bevat voorgronddiensten (specialUse): dien eerst de verklaring in (store/PLAY-CONSOLE.md, stap 3b)."
+  fi
   exit 0
 fi
 

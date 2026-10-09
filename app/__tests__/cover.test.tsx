@@ -210,6 +210,14 @@ describe('config plugin (plugins/withFlexWindow.js)', () => {
     expect(java.indexOf('paintIfEmpty')).toBeLessThan(java.indexOf('super.onUpdate'));
   });
 
+  test('tik op de widget: het intro opnieuw, andere acties naar de widgetbibliotheek', () => {
+    const java = (plugin as unknown as { providerJava: (pkg: string, name: string) => string }).providerJava('be.nexai.picontrol', 'PiCover');
+    expect(java).toContain('import android.content.Intent;');
+    expect(java).toContain('CoverScreen.ACTION_REPLAY.equals(intent.getAction())');
+    expect(java).toContain('CoverScreen.INSTANCE.replay(context);');
+    expect(java.indexOf('CoverScreen.INSTANCE.replay')).toBeLessThan(java.indexOf('super.onReceive'));
+  });
+
   async function runManifest(receivers: unknown[]) {
     const cfg = plugin({ name: 'x', slug: 'x', android: { package: 'be.nexai.picontrol' } });
     const manifest = { manifest: { $: {}, application: [{ $: { 'android:name': '.MainApplication' }, receiver: receivers }] } };

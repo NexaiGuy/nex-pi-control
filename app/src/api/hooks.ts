@@ -7,8 +7,8 @@ import { cacheGet, cacheSet } from './cache';
 import { ApiError, api } from './client';
 import type {
   ActionResult, AgentUpdateState, AuditEntry, Backup, Command, CommandResult, ContainerRestartResult, ContainersResponse, DeviceInfo, Disks,
-  EventsResponse, GpioState, Info, LogLine, MetricMeta, Overview, Ports, Process, RangeKey, Series, SensorsResponse, Service, ShellState,
-  SitesResponse, UpdatesState, WolDevice,
+  EventsResponse, GpioState, Info, LabelKind, LabelResult, LabelsInfo, LogLine, MetricMeta, Overview, Ports, Process, RangeKey, Series,
+  SensorsResponse, Service, ShellState, SitesResponse, UpdatesState, WolDevice,
 } from './types';
 import { createStore } from '@/state/store';
 
@@ -89,6 +89,7 @@ export const qk = {
   events: ['events'] as const,
   updates: ['updates'] as const,
   agentUpdate: ['agent-update'] as const,
+  labels: ['labels'] as const,
 };
 
 export const useInfo = () => useCached<Info>(qk.info, () => api.get('/v1/info'), 60000);
@@ -136,6 +137,7 @@ export const useAgentUpdate = (fast: boolean, enabled = true) =>
     retry: (count) => count < (fast ? 20 : 2),
     retryDelay: 2000,
   });
+export const useLabels = (enabled = true) => useCached<LabelsInfo>(qk.labels, () => api.get('/v1/labels'), false, { enabled });
 export const useShellState = (interval: number | false = 5000) => useCached<ShellState>(qk.shell, () => api.get('/v1/shell'), interval);
 
 // Acties --------------------------------------------------------------------------
@@ -165,6 +167,12 @@ export const useShellStop = () => useAction(() => api.post<ActionResult>('/v1/sh
 export const useAckCrc = () => useAction(() => api.post<ActionResult>('/v1/disks/acknowledge-crc'), [qk.disks, qk.overview]);
 export const useRestartContainer = () =>
   useAction((ref: string) => api.post<ContainerRestartResult>(`/v1/containers/${encodeURIComponent(ref)}/restart`, {}, { timeoutMs: 130000 }), [qk.containers, qk.overview, qk.events]);
+/** Bewust uit (parked: true/false/null = automatisch) en categorie (group: naam of null = automatisch). Weglaten = ongewijzigd. */
+export const useSetLabel = () =>
+  useAction(
+    (v: { kind: LabelKind; name: string; parked?: boolean | null; group?: string | null }) => api.post<LabelResult>('/v1/labels', v),
+    [['services'], qk.containers, qk.sites, qk.overview, qk.events, qk.labels],
+  );
 export const useCheckUpdates = () => useAction(() => api.post<ActionResult>('/v1/updates/check'), [qk.updates]);
 export const useInstallUpdates = () => useAction(() => api.post<ActionResult>('/v1/updates/install'), [qk.updates]);
 export const useStartAgentUpdate = () => useAction(() => api.post<ActionResult>('/v1/agent/update'), [qk.agentUpdate]);

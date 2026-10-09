@@ -3,7 +3,7 @@
     "name": "Nex Pi Control",
     "slug": "nex-pi-control",
     "scheme": "nexpicontrol",
-    "version": "1.4.2",
+    "version": "1.5.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -12,7 +12,7 @@
     "newArchEnabled": true,
     "android": {
       "package": "be.nexai.picontrol",
-      "versionCode": 12,
+      "versionCode": 14,
       "adaptiveIcon": {
         "backgroundColor": "#050508",
         "backgroundImage": "./assets/android-icon-background.png",
@@ -31,6 +31,7 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
         "android.permission.SYSTEM_ALERT_WINDOW",
         "com.google.android.gms.permission.AD_ID"
       ]

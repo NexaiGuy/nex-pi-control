@@ -1,0 +1,47 @@
+# Categories and "switched off on purpose" for services, containers and sites.
+#
+# You can also do all of this in the app: open a service, container or site and use "Category" and
+# "Switched off on purpose". What you set in the app always wins over this file. The agent rereads this file
+# as soon as it changes, no restart needed.
+#
+# Patterns are shell globs, case-insensitive. Without a prefix a pattern matches every name: the service name
+# (without .service), the container name, the compose project and the hostname. Narrow it down with a prefix:
+#   service:backup-*     container:old-*     project:media     site:*.example.com
+
+# Switched off on purpose: when something is not running, it does not count as a problem, sends no
+# notification and is listed separately under "Switched off". When it runs again it is monitored as usual.
+#
+# auto_parked: true also treats these as switched off on purpose, without listing them:
+#   - a service that is not running and disabled (systemctl disable --now)
+#   - a container that exited with code 0, or with 130, 137 or 143 (the signal from docker stop or compose
+#     stop) while its restart policy is always or unless-stopped. Any other exit code, or an OOM kill, is a
+#     crash and stays a problem.
+#   - a site that is unreachable while its backend is switched off on purpose: the cloudflared container
+#     that serves it, the container that publishes its port, or a service that has the port in its unit
+#     file or in your port registry (HAL_AGENT_PORTS_FILE)
+auto_parked: true
+
+parked: []
+# Example:
+# parked:
+#   - old-blog            # service, container, project or hostname
+#   - project:minecraft
+#   - site:test.example.com
+
+# Categories, in the order the app shows them. The first match wins. Everything that matches nothing gets an
+# automatic category: services "Own services" or "System", containers their compose project, sites their domain.
+groups: {}
+# Example:
+# groups:
+#   Home:
+#     - home-assistant*
+#     - zigbee2mqtt*
+#     - mosquitto*
+#     - site:home.example.com
+#   Media:
+#     - project:media
+#     - jellyfin*
+#   Monitoring:
+#     - grafana*
+#     - prometheus*
+#     - uptime-kuma*

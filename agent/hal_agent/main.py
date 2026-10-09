@@ -17,7 +17,7 @@ from hal_common.i18n import L
 from hal_common.ratelimit import RateLimiter
 from hal_common.web import api_error, install_common
 
-from .config import ID_RE, UNIT_RE, Settings
+from .config import HOST_RE, ID_RE, UNIT_RE, Settings
 from .history import RANGES
 from .maintenance import CONTAINER_NAME_RE
 
@@ -42,6 +42,19 @@ class GpioBody(Strict):
     duration_ms: int = Field(default=500, ge=20, le=10000)
 
 
+class LabelBody(Strict):
+    """Bewust uit en categorie van één dienst, container of site. Wat je weglaat, blijft zoals het was.
+
+    parked: true = bewust uit, false = altijd bewaken, null = automatisch.
+    group: naam van de categorie, null of "" = automatisch.
+    """
+
+    kind: Literal["service", "container", "site"]
+    name: str = Field(min_length=1, max_length=253)
+    parked: bool | None = None
+    group: str | None = Field(default=None, max_length=40)
+
+
 class PowerBody(Strict):
     action: Literal["reboot", "poweroff"]
     confirm: str = Field(min_length=1, max_length=40)
@@ -61,7 +74,7 @@ def create_app(settings: Settings | None = None, backend=None, authenticator: Au
     settings = settings or Settings.from_env()
     backend = backend or build_backend(settings)
     auth = authenticator or Authenticator(AuthConfig(settings.token, settings.team_domain, settings.aud))
-    limiter = RateLimiter({"read": (120, 60.0), "action": (5, 60.0), "gpio": (30, 60.0)})
+    limiter = RateLimiter({"read": (120, 60.0), "action": (5, 60.0), "gpio": (30, 60.0), "label": (30, 60.0)})
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -88,6 +101,7 @@ def create_app(settings: Settings | None = None, backend=None, authenticator: Au
     read = [Depends(auth.http_dependency), Depends(limiter.dependency("read"))]
     act = [Depends(auth.http_dependency), Depends(limiter.dependency("action"))]
     gpio_lim = [Depends(auth.http_dependency), Depends(limiter.dependency("gpio"))]
+    label_lim = [Depends(auth.http_dependency), Depends(limiter.dependency("label"))]
 
     def audit(identity: dict, action: str, target: str | None, ok: bool, detail: str = "") -> None:
         backend.audit_log.record(identity, action, target, "ok" if ok else "fout", detail)
@@ -146,7 +160,7 @@ def create_app(settings: Settings | None = None, backend=None, authenticator: Au
 
     @app.get("/v1/services", dependencies=read)
     async def services(
-        filter: Literal["all", "custom", "failed", "active"] = "all",  # noqa: A002
+        filter: Literal["all", "custom", "failed", "active", "parked"] = "all",  # noqa: A002
         q: Annotated[str | None, Query(max_length=60)] = None,
     ) -> list[dict[str, Any]]:
         return await backend.services(filter, q)
@@ -177,6 +191,31 @@ def create_app(settings: Settings | None = None, backend=None, authenticator: Au
             audit(identity, "container:restart", ref, False, str(getattr(exc, "detail", exc))[:200])
             raise
         audit(identity, "container:restart", res.get("name", ref), res["ok"], "" if res["ok"] else res.get("message", ""))
+        return res
+
+    # Bewust uit en categorieën ----------------------------------------------
+
+    @app.get("/v1/labels", dependencies=read)
+    async def labels() -> dict[str, Any]:
+        return backend.labels_info()
+
+    @app.post("/v1/labels", dependencies=label_lim)
+    async def labels_set(body: LabelBody, identity: dict = Depends(auth.http_dependency)) -> dict[str, Any]:
+        ok_name = {"service": lambda n: bool(UNIT_RE.match(n)), "container": lambda n: bool(CONTAINER_REF_RE.match(n)),
+                   "site": lambda n: bool(HOST_RE.match(n))}[body.kind]
+        if not ok_name(body.name):
+            raise api_error(422, "invalid_input", "Ongeldige invoer")
+        changes = {k: getattr(body, k) for k in ("parked", "group") if k in body.model_fields_set}
+        if not changes:
+            raise api_error(422, "invalid_input", "Ongeldige invoer")
+        target = f"{body.kind}:{body.name}"
+        detail = ", ".join(f"{k}={'auto' if v in (None, '') else v}" for k, v in changes.items())
+        try:
+            res = await backend.labels_set(body.kind, body.name, changes)
+        except Exception as exc:
+            audit(identity, "label", target, False, str(getattr(exc, "detail", exc))[:200])
+            raise
+        audit(identity, "label", target, True, detail[:200])
         return res
 
     # Gebeurtenissen en updates ----------------------------------------------
@@ -297,7 +336,7 @@ def create_app(settings: Settings | None = None, backend=None, authenticator: Au
     async def allowed() -> dict[str, Any]:
         cfg = backend.config
         return {"restart": backend.restart_allowed(), "containers": cfg.allow("containers"), "updates": cfg.allow("updates"),
-                "agent_update": cfg.allow("agent_update"), "power": cfg.allow("power")}
+                "agent_update": cfg.allow("agent_update"), "power": cfg.allow("power"), "labels": cfg.allow("labels")}
 
     @app.post("/v1/actions/restart-service", dependencies=act)
     async def restart_service(body: RestartBody, identity: dict = Depends(auth.http_dependency)) -> dict[str, Any]:

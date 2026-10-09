@@ -3,6 +3,7 @@ import { useState } from 'react';
 
 import { errorMessage } from '@/api/client';
 import { useContainerLogs, useContainers, useInfo, useRestartContainer } from '@/api/hooks';
+import { LabelCard } from '@/components/LabelCard';
 import { DetailScreen } from '@/components/layout';
 import { ConfirmSheet, ErrorState, LogView, SkeletonList, toast, type ConfirmSpec } from '@/components/overlays';
 import { Button, Card, KeyValue, Row, SectionTitle, StatusPill, T } from '@/components/primitives';
@@ -35,7 +36,7 @@ export default function ContainerDetail() {
           <KeyValue k={t.system.image} v={x.image} />
           <KeyValue k={t.system.project} v={x.project} />
           <KeyValue k={t.system.status} v={x.status} />
-          <KeyValue k={t.system.health} v={x.health ?? '–'} />
+          <KeyValue k={t.system.health} v={x.state !== 'running' && x.last_health ? `${x.health ?? '–'} (${x.last_health})` : x.health ?? '–'} />
           <KeyValue k="CPU" v={pct(x.cpu_percent ?? 0)} />
           <KeyValue k={t.system.memory} v={bytes(x.memory_bytes ?? 0)} />
           <KeyValue k={t.system.restarts} v={String(x.restart_count ?? 0)} />
@@ -46,6 +47,7 @@ export default function ContainerDetail() {
           />
         </Card>
       ) : null}
+      {x ? <LabelCard kind="container" name={x.name} item={x} /> : null}
       <SectionTitle>{t.system.logs}</SectionTitle>
       {!logs.data && logs.isLoading ? <SkeletonList rows={4} /> : null}
       {!logs.data && logs.error ? <ErrorState error={logs.error} onRetry={() => void logs.refetch()} /> : null}

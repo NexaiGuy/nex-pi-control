@@ -26,6 +26,7 @@ from .collectors.system import SystemSampler, device_info, mounts
 from .config import ConfigFiles, Settings
 from .health import compute_health, counts, disk_alarms
 from .history import METRIC_CATALOG, HistoryStore, describe_metric
+from .labels import KINDS, Labels, LabelStore, parked_keys
 from .maintenance import (
     AGENT_UPDATE_UNIT,
     APT_CHECK_UNIT,
@@ -63,6 +64,9 @@ class RealBackend:
         self.sensor_values: dict[str, dict[str, Any]] = {}
         self._backups_cache: tuple[float, list] | None = None
         self._services_snapshot: list[dict[str, Any]] = []
+        self.labels = Labels(self.config.groups, LabelStore(settings.state_dir / "labels.json"))
+        self._parked_keys: set[str] = set()
+        self._ports_cache: tuple[float | None, list[dict[str, Any]]] = (None, [])
         self._tasks: list[asyncio.Task] = []
         self._pending: set[asyncio.Task] = set()
 
@@ -115,7 +119,8 @@ class RealBackend:
                     if cached:
                         values["containers.running"] = sum(1 for c in cached if c["state"] == "running")
                     if self._services_snapshot:
-                        values["services.failed"] = sum(1 for s in self._services_snapshot if s["active"] == "failed")
+                        values["services.failed"] = sum(1 for s in self._services_snapshot
+                                                        if s["active"] == "failed" and f"service:{s['name']}" not in self._parked_keys)
                     await asyncio.to_thread(self.history.write, int(time.time()), values)
                     await asyncio.to_thread(self.processes_c.prime)
             except asyncio.CancelledError:
@@ -152,8 +157,9 @@ class RealBackend:
 
     async def _refresh_events(self) -> None:
         ctr = self.containers_c.cached()
-        conds = conditions(self.smart.read_all(), self._services_snapshot, ctr["containers"],
-                           list(self.sites_c.results.values()), read_apt_status(self.apt_path))
+        svc, cts, sts = self._labeled(self._services_snapshot, ctr["containers"], list(self.sites_c.results.values()), with_groups=False)
+        self._parked_keys = parked_keys(svc, cts, sts)
+        conds = conditions(self.smart.read_all(), svc, cts, sts, read_apt_status(self.apt_path))
         # Nog geen (geldige) meting: open problemen van die soort niet als "opgelost" melden.
         unknown = set()
         if self.sites_c.updated_at is None:
@@ -162,7 +168,7 @@ class RealBackend:
             unknown.add("service")
         if ctr.get("updated_at") is None or ctr.get("error"):
             unknown.add("container")
-        await asyncio.to_thread(self.events_store.sync, conds, None, unknown)
+        await asyncio.to_thread(self.events_store.sync, conds, None, unknown, self._parked_keys)
 
     async def _maintain(self) -> None:
         await asyncio.to_thread(self.history.maintain)
@@ -171,6 +177,56 @@ class RealBackend:
         t = asyncio.create_task(coro)
         self._pending.add(t)
         t.add_done_callback(self._pending.discard)
+
+    # Bewust uit en categorieën ---------------------------------------------
+
+    def _port_registry(self) -> list[dict[str, Any]]:
+        """Het poortregister (PORTS.md), opnieuw ingelezen als het wijzigt. Koppelt een poort aan een dienstnaam."""
+        path = self.settings.ports_file
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            return []
+        if self._ports_cache[0] != mtime:
+            try:
+                rows = misc.parse_ports_md(path.read_text(encoding="utf-8"))
+            except OSError:
+                rows = []
+            self._ports_cache = (mtime, rows)
+        return self._ports_cache[1]
+
+    def _labeled(self, services, containers, sites, with_groups: bool = True):
+        return self.labels.annotate(services, containers, sites, self.services_c.unit_paths, self._port_registry(), with_groups)
+
+    def labels_info(self) -> dict[str, Any]:
+        cfg = self.labels.settings()
+        return {"groups": self.labels.group_names(), "auto_parked": cfg["auto_parked"], "editable": self.config.allow("labels")}
+
+    async def labels_set(self, kind: str, name: str, changes: dict[str, Any]) -> dict[str, Any]:
+        if kind not in KINDS:
+            raise api_error(422, "invalid_input", "Ongeldige invoer")
+        if not self.config.allow("labels"):
+            raise api_error(403, "forbidden", L("Categorieën en bewust uit staan uit in allowed-actions.yml", "Categories and switched off are disabled in allowed-actions.yml"))
+        if kind == "service":
+            known = {s["name"] for s in self._services_snapshot or await self.services_c.list()}
+        elif kind == "container":
+            known = {c["name"] for c in self.containers_c.cached()["containers"]}
+        else:
+            known = set(self.sites_c.results)
+        if name not in known:
+            raise api_error(404, "not_found", L("Onbekend item", "Unknown item"))
+        if "group" in changes:
+            try:
+                changes["group"] = self.labels.validate_group(changes["group"])
+            except ValueError:
+                raise api_error(422, "invalid_input", "Ongeldige invoer")
+        try:
+            entry = await asyncio.to_thread(self.labels.store.set, kind, name, changes)
+        except (OSError, ValueError) as exc:
+            raise api_error(409, "conflict", L(f"Opslaan mislukt: {exc}", f"Saving failed: {exc}"))
+        # Meteen opnieuw rekenen, zodat open meldingen van wat nu bewust uit staat niet 30 s blijven hangen.
+        self._spawn(self._refresh_events())
+        return {"ok": True, "kind": kind, "name": name, "parked_setting": entry.get("parked"), "group_setting": entry.get("group")}
 
     # Lezen -----------------------------------------------------------------
 
@@ -182,7 +238,7 @@ class RealBackend:
             "gpio_available": self.gpio.available,
             "shell_url": self.settings.shell_url,
             "access_configured": bool(self.settings.team_domain and self.settings.aud),
-            "features": ["events", "updates", "agent_update", "container_restart"],
+            "features": ["events", "updates", "agent_update", "container_restart", "labels"],
         }
 
     async def _backups(self) -> list[dict[str, Any]]:
@@ -203,9 +259,8 @@ class RealBackend:
         snap = self.sampler.snapshot
         m = mounts()
         smart = self.smart.read_all()
-        services = self._services_snapshot or await self.services_c.list()
-        containers = self.containers_c.cached()["containers"]
-        sites = list(self.sites_c.results.values())
+        services, containers, sites = self._labeled(self._services_snapshot or await self.services_c.list(),
+                                                    self.containers_c.cached()["containers"], list(self.sites_c.results.values()), with_groups=False)
         backups = await self._backups()
         return {
             "ts": int(time.time()),
@@ -231,12 +286,15 @@ class RealBackend:
 
     async def services(self, filt: str, q: str | None) -> list[dict[str, Any]]:
         items = await self.services_c.list()
+        items, _, _ = self._labeled(items, self.containers_c.cached()["containers"], [])
         allowed = set(self.config.restart_units())
         out = []
         for s in items:
             if filt == "custom" and not s.get("custom"):
                 continue
-            if filt == "failed" and s["active"] != "failed":
+            if filt == "failed" and (s["active"] != "failed" or s["parked"]):
+                continue
+            if filt == "parked" and not s["parked"]:
                 continue
             if filt == "active" and s["active"] != "active":
                 continue
@@ -252,7 +310,8 @@ class RealBackend:
 
     def containers(self) -> dict[str, Any]:
         data = self.containers_c.cached()
-        return {**data, "containers": [{**c, "restart_allowed": self.config.container_restart_allowed(c["name"])} for c in data["containers"]]}
+        _, items, _ = self._labeled([], data["containers"], [])
+        return {**data, "containers": [{**c, "restart_allowed": self.config.container_restart_allowed(c["name"])} for c in items]}
 
     async def container_logs(self, ref: str, lines: int) -> list[str]:
         cid = self.containers_c.resolve(ref)
@@ -264,7 +323,8 @@ class RealBackend:
             raise api_error(503, "unavailable", "Docker-proxy onbereikbaar")
 
     def sites(self) -> dict[str, Any]:
-        return {"sites": sorted(self.sites_c.results.values(), key=lambda s: s["hostname"]), "updated_at": self.sites_c.updated_at,
+        _, _, items = self._labeled(self._services_snapshot, self.containers_c.cached()["containers"], list(self.sites_c.results.values()))
+        return {"sites": sorted(items, key=lambda s: s["hostname"]), "updated_at": self.sites_c.updated_at,
                 "discovery": self.config.site_discovery()}
 
     def processes(self, sort: str, limit: int, q: str | None) -> list[dict[str, Any]]:

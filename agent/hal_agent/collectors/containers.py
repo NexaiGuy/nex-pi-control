@@ -43,13 +43,32 @@ def sanitize_summary(c: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def host_ports(d: dict[str, Any]) -> list[int]:
+    """Gepubliceerde poorten uit HostConfig.PortBindings. Die blijven bekend als de container gestopt is
+    (de lijst van /containers/json toont dan geen poorten meer); zo kan een site aan zijn container gekoppeld worden."""
+    out: set[int] = set()
+    for binds in ((d.get("HostConfig") or {}).get("PortBindings") or {}).values():
+        for b in binds or []:
+            try:
+                p = int((b or {}).get("HostPort") or 0)
+            except (TypeError, ValueError):
+                continue
+            if 0 < p < 65536:
+                out.add(p)
+    return sorted(out)
+
+
 def sanitize_inspect(d: dict[str, Any]) -> dict[str, Any]:
     state = d.get("State") or {}
     health = (state.get("Health") or {}).get("Status")
     cfg = d.get("Config") or {}
+    running = state.get("Running") is True or state.get("Status") in ("running", "restarting")
     return {
         "restart_count": int(d.get("RestartCount") or 0),
-        "health": health or "geen",
+        # Docker bewaart de laatste healthcheck ook na het stoppen. Een gestopte container is niet "ongezond".
+        "health": (health or "geen") if running else "geen",
+        "last_health": health or None,
+        "host_ports": host_ports(d),
         "started_at": state.get("StartedAt"),
         "exit_code": state.get("ExitCode"),
         "oom_killed": bool(state.get("OOMKilled")),

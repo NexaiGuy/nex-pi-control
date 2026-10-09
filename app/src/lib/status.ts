@@ -1,8 +1,15 @@
-import type { Container, Service, Site } from '@/api/types';
+import type { Container, Labeled, Service, Site } from '@/api/types';
 import { t } from '@/i18n';
 import type { Level } from '@/theme/tokens';
 
+/** Bewust uit: grijs, nooit rood of oranje. */
+export function parkedLevel(x: Labeled): { level: Level; label: string } | null {
+  return x.parked ? { level: 'unknown', label: t.labels.parked } : null;
+}
+
 export function serviceLevel(s: Service): { level: Level; label: string } {
+  const p = parkedLevel(s);
+  if (p) return p;
   if (s.active === 'failed') return { level: 'critical', label: t.system.states.failed };
   if (s.active === 'active') return { level: 'ok', label: s.sub === 'running' ? t.system.states.active : s.sub };
   if (s.active === 'activating' || s.active === 'reloading') return { level: 'warning', label: t.system.states.starting };
@@ -10,7 +17,10 @@ export function serviceLevel(s: Service): { level: Level; label: string } {
 }
 
 export function containerLevel(c: Container): { level: Level; label: string } {
-  if (c.health === 'unhealthy') return { level: 'critical', label: t.system.states.unhealthy };
+  const p = parkedLevel(c);
+  if (p) return p;
+  // Een gestopte container is niet "ongezond": oudere agents sturen de laatste healthcheck nog mee.
+  if (c.health === 'unhealthy' && (c.state === 'running' || c.state === 'restarting')) return { level: 'critical', label: t.system.states.unhealthy };
   if (c.state === 'running') return { level: 'ok', label: c.health === 'healthy' ? t.system.states.healthy : t.system.states.running };
   if (c.state === 'restarting') return { level: 'warning', label: t.system.states.restarting };
   if (c.state === 'exited' && c.exit_code) return { level: 'critical', label: `${t.system.states.stopped} (${c.exit_code})` };
@@ -18,6 +28,8 @@ export function containerLevel(c: Container): { level: Level; label: string } {
 }
 
 export function siteLevel(s: Site): { level: Level; label: string } {
+  const p = parkedLevel(s);
+  if (p) return p;
   switch (s.state) {
     case 'up':
       return { level: 'ok', label: `${s.status_code ?? ''} ${t.system.states.online}` };

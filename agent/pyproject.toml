@@ -1,6 +1,6 @@
 [project]
 name = "nex-pi-control-agent"
-version = "1.2.6"
+version = "1.3.0"
 description = "Agent and admin shell for Nex Pi Control"
 license = "MIT"
 requires-python = ">=3.11"

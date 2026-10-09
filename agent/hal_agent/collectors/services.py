@@ -47,6 +47,8 @@ class ServiceCollector:
     def __init__(self, cache_seconds: float = 10.0) -> None:
         self.cache_seconds = cache_seconds
         self._cache: tuple[float, list[dict[str, Any]]] | None = None
+        # Unitbestand per dienst (intern, gaat niet naar de app): om een site aan een uitgezette dienst te koppelen.
+        self.unit_paths: dict[str, str] = {}
 
     async def list(self, force: bool = False) -> list[dict[str, Any]]:
         if not force and self._cache and time.monotonic() - self._cache[0] < self.cache_seconds:
@@ -59,6 +61,7 @@ class ServiceCollector:
             except (ValueError, KeyError, TypeError):
                 units = []
         details: list[dict[str, Any]] = []
+        paths: dict[str, str] = {}
         now_us = _uptime_monotonic_us()
         for i in range(0, len(units), 60):
             batch = units[i:i + 60]
@@ -68,6 +71,8 @@ class ServiceCollector:
                     continue
                 enter = int(b.get("ActiveEnterTimestampMonotonic") or 0)
                 active = b.get("ActiveState", "unknown")
+                if b.get("FragmentPath"):
+                    paths[b.get("Id", "")] = b["FragmentPath"]
                 details.append({
                     "name": b.get("Id", ""),
                     "description": b.get("Description", ""),
@@ -82,6 +87,7 @@ class ServiceCollector:
                     "custom": (b.get("FragmentPath") or "").startswith("/etc/systemd/system/"),
                 })
         details.sort(key=lambda d: d["name"])
+        self.unit_paths = paths
         self._cache = (time.monotonic(), details)
         return details
 

@@ -145,16 +145,18 @@ class ConfigFiles:
     sites: YamlConfig = field(init=False)
     discovered_sites: JsonFile = field(init=False)
     backups: YamlConfig = field(init=False)
+    groups: YamlConfig = field(init=False)
 
     def __post_init__(self) -> None:
         d = self.config_dir
-        self.allowed_actions = YamlConfig(d / "allowed-actions.yml", {"restart": [], "power": True, "containers": True, "container_deny": [], "updates": True, "agent_update": True})
+        self.allowed_actions = YamlConfig(d / "allowed-actions.yml", {"restart": [], "power": True, "containers": True, "container_deny": [], "updates": True, "agent_update": True, "labels": True})
         self.commands = YamlConfig(d / "commands.yml", {"commands": []})
         self.wol = YamlConfig(d / "wol.yml", {"devices": []})
         self.sensors = YamlConfig(d / "sensors.yml", {"sensors": []})
         self.gpio = YamlConfig(d / "gpio.yml", {"allowed_pins": [], "labels": {}})
         self.sites = YamlConfig(d / "sites.yml", {"sites": []})
         self.discovered_sites = JsonFile(self.discovered_sites_path)
+        self.groups = YamlConfig(d / "groups.yml", {"auto_parked": True, "parked": [], "groups": {}})
         self.backups = YamlConfig(d / "backups.yml", {"max_age_hours": 36, "ignore": [], "snapshots_are_archive": True, "timers": ["*backup*"]})
 
     # Gevalideerde weergaven -------------------------------------------------
@@ -170,7 +172,7 @@ class ConfigFiles:
         return out
 
     def allow(self, key: str) -> bool:
-        """Aan/uit-schakelaars in allowed-actions.yml: containers, updates, agent_update, power. Standaard aan."""
+        """Aan/uit-schakelaars in allowed-actions.yml: containers, updates, agent_update, power, labels. Standaard aan."""
         v = self.allowed_actions.get().get(key, True)
         return v is True or (isinstance(v, str) and v.strip().lower() in ("true", "yes", "on", "1"))
 
