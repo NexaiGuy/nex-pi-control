@@ -6,7 +6,7 @@
 #
 # Patterns are shell globs, case-insensitive. Without a prefix a pattern matches every name: the service name
 # (without .service), the container name, the compose project and the hostname. Narrow it down with a prefix:
-#   service:backup-*     container:old-*     project:media     site:*.example.com
+#   service:backup-*     container:old-*     project:media     site:*.example.com     backup:legacy-*
 
 # Switched off on purpose: when something is not running, it does not count as a problem, sends no
 # notification and is listed separately under "Switched off". When it runs again it is monitored as usual.
@@ -19,6 +19,9 @@
 #   - a site that is unreachable while its backend is switched off on purpose: the cloudflared container
 #     that serves it, the container that publishes its port, or a service that has the port in its unit
 #     file or in your port registry (HAL_AGENT_PORTS_FILE)
+#   - a backup whose timer is disabled, whose own service is switched off, or whose name belongs to something
+#     that is entirely switched off (ndf2-backup follows the compose project ndf2). A backup that succeeds is
+#     never hidden.
 auto_parked: true
 
 parked: []

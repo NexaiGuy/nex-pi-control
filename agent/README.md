@@ -80,8 +80,9 @@ Something you stopped on purpose is not a problem. Since agent 1.3.0 it does not
 - a service that is not running and disabled (`systemctl disable --now`)
 - a container that exited with code 0, or with 130, 137 or 143 (the signal from `docker stop` or `docker compose stop`) while its restart policy is `always` or `unless-stopped`. Any other exit code, or an OOM kill, is a crash and stays a problem
 - a site that is unreachable while its backend is switched off: the cloudflared container that serves it, the container that publishes its port, or a service that has that port in its unit file or in the port registry
+- a backup (since 1.3.1) whose timer is disabled, whose own service is switched off, or that belongs to something that is entirely switched off: `ndf2-backup` follows the compose project `ndf2`. While anything of `ndf2` still runs, the backup stays monitored. A backup that succeeds is never hidden
 
-For anything else, open it in the app and turn on "Switched off on purpose", or list it under `parked:` in `groups.yml`. It only counts while it is not running: start it again and it is monitored as usual.
+For anything else, open it in the app and turn on "Switched off on purpose", or list it under `parked:` in `groups.yml` (prefix `backup:` targets a backup by name). It only counts while it is not running: start it again and it is monitored as usual.
 
 Services, containers and sites are grouped in categories. Without configuration services are split in your own services and system services, containers follow their compose project and sites their domain. Set your own categories in `groups.yml` (glob patterns, first match wins) or per item in the app. What you set in the app is stored in `/var/lib/hal-agent/labels.json` and always wins over `groups.yml`.
 

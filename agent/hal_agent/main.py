@@ -21,6 +21,8 @@ from .config import HOST_RE, ID_RE, UNIT_RE, Settings
 from .history import RANGES
 from .maintenance import CONTAINER_NAME_RE
 
+BACKUP_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@-]{0,199}$")
+
 log = logging.getLogger("hal.agent")
 
 METRIC_RE = re.compile(r"^[a-z0-9_.:/@-]{1,120}$")
@@ -49,7 +51,7 @@ class LabelBody(Strict):
     group: naam van de categorie, null of "" = automatisch.
     """
 
-    kind: Literal["service", "container", "site"]
+    kind: Literal["service", "container", "site", "backup"]
     name: str = Field(min_length=1, max_length=253)
     parked: bool | None = None
     group: str | None = Field(default=None, max_length=40)
@@ -202,7 +204,7 @@ def create_app(settings: Settings | None = None, backend=None, authenticator: Au
     @app.post("/v1/labels", dependencies=label_lim)
     async def labels_set(body: LabelBody, identity: dict = Depends(auth.http_dependency)) -> dict[str, Any]:
         ok_name = {"service": lambda n: bool(UNIT_RE.match(n)), "container": lambda n: bool(CONTAINER_REF_RE.match(n)),
-                   "site": lambda n: bool(HOST_RE.match(n))}[body.kind]
+                   "site": lambda n: bool(HOST_RE.match(n)), "backup": lambda n: bool(BACKUP_NAME_RE.match(n))}[body.kind]
         if not ok_name(body.name):
             raise api_error(422, "invalid_input", "Ongeldige invoer")
         changes = {k: getattr(body, k) for k in ("parked", "group") if k in body.model_fields_set}

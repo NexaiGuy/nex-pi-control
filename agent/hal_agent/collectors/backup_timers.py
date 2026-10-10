@@ -66,6 +66,7 @@ def build(timers: list[dict[str, Any]], show: dict[str, dict[str, str]], max_age
         name = t["service"].removesuffix(".service") or t["timer"].removesuffix(".timer")
         item: dict[str, Any] = {
             "name": name, "path": f"systemd:{t['timer']}", "kind": "job", "source": "timer",
+            "unit": t["service"] or None, "next_at": nxt,
             "description": s.get("Description", ""), "result": result or None, "max_age_seconds": allowed,
         }
         if not last:

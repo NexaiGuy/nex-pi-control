@@ -10,7 +10,9 @@ Drie bronnen, in deze volgorde:
      het herstartbeleid always of unless-stopped is. Een andere exitcode is een crash: Docker herstart een container
      die binnen 10 s na de start stopt niet, die blijft dus gewoon een probleem. Een OOM-kill ook;
    - site: onbereikbaar terwijl de backend bewust uit staat (de tunnelcontainer, de container op die poort, een dienst
-     die die poort in zijn unitbestand of in het poortregister heeft).
+     die die poort in zijn unitbestand of in het poortregister heeft);
+   - back-up (sinds 1.3.1): de timer is uitgeschakeld, de eigen dienst van de back-up staat bewust uit, of alles waar
+     de back-up bij hoort staat bewust uit (ndf2-backup bij het compose-project ndf2). Zie Labels.annotate_backups.
 
 Bewust uit geldt enkel zolang iets niet draait. Start je het opnieuw, dan wordt het meteen weer gewoon bewaakt.
 Iets dat bewust uit staat telt niet als probleem, geeft geen melding en staat in de app apart onderaan.
@@ -76,7 +78,7 @@ def _compile(patterns: list[str]) -> list[tuple[str | None, re.Pattern[str]]]:
     out: list[tuple[str | None, re.Pattern[str]]] = []
     for p in patterns:
         scope, sep, glob = p.partition(":")
-        if sep and scope in ("service", "container", "project", "site"):
+        if sep and scope in ("service", "container", "project", "site", "backup"):
             out.append((scope, re.compile(fnmatch.translate(glob))))
         else:
             out.append((None, re.compile(fnmatch.translate(p))))
@@ -86,7 +88,7 @@ def _compile(patterns: list[str]) -> list[tuple[str | None, re.Pattern[str]]]:
 def match_any(patterns: list[str] | list[tuple[str | None, re.Pattern[str]]], kind: str, names: dict[str, str]) -> bool:
     """`names`: per soort de naam waarop gematcht wordt. Een patroon zonder voorvoegsel geldt voor elke naam.
 
-    Voorvoegsels: service:, container:, project: (compose-project), site:.
+    Voorvoegsels: service:, container:, project: (compose-project), site:, backup:.
     """
     compiled = _compile(patterns) if patterns and isinstance(patterns[0], str) else patterns  # type: ignore[arg-type]
     for scope, rx in compiled:  # type: ignore[misc]
@@ -110,6 +112,29 @@ def _names(kind: str, item: dict[str, Any]) -> dict[str, str]:
             out["project"] = str(proj).lower()
         return out
     return {"site": str(item.get("hostname", "")).lower()}
+
+
+# Woorden die een back-up aanduiden. Wat overblijft is waar de back-up bij hoort: ndf2-backup -> ndf2.
+BACKUP_WORDS = re.compile(r"(?:^|[-_.])(?:backups?|bak|dump|snapshot|offsite|nightly|daily|weekly)(?=$|[-_.])")
+BACKUP_REASONS = {
+    "timer_off": ("timer uitgeschakeld", "timer disabled"),
+    "target": ("hoort bij iets dat bewust uit staat", "belongs to something switched off"),
+    "config": ("groups.yml", "groups.yml"),
+    "app": ("ingesteld in de app", "set in the app"),
+}
+
+
+def backup_stem(name: str) -> str:
+    s = _stem(str(name or "").lower())
+    s = s[:-6] if s.endswith(".timer") else s
+    return BACKUP_WORDS.sub("-", s).strip("-_.")
+
+
+def _related(stem: str, other: str) -> bool:
+    """ndf2 hoort bij ndf2, ndf2-web en ndf2_db, niet bij ndf20."""
+    if not stem or not other:
+        return False
+    return other == stem or other.startswith((stem + "-", stem + "_")) or stem.startswith((other + "-", other + "_"))
 
 
 def is_running(kind: str, item: dict[str, Any]) -> bool:
@@ -398,6 +423,83 @@ class Labels:
             if s.get("group_source") == "auto" and count.get(s["group"], 0) < 2:
                 s.update(group=L("Andere domeinen", "Other domains"), group_order=ORDER_OTHER)
 
+    # Back-ups --------------------------------------------------------------------------------
+
+    def annotate_backups(self, backups: list[dict[str, Any]] | None, services: list[dict[str, Any]] | None,
+                         containers: list[dict[str, Any]] | None, default_max_age: int = 36 * 3600) -> list[dict[str, Any]]:
+        """Back-ups van iets dat bewust uit staat tellen niet als probleem. `services` en `containers` komen uit annotate().
+
+        Een back-up staat bewust uit (enkel zolang hij een waarschuwing zou geven) als:
+          1. de app het zegt (backup:<naam>, of de eigen dienst van de back-up staat in de app op bewust uit);
+          2. groups.yml hem raakt (backup:<glob>, service:<glob> op de eigen dienst, of een patroon zonder voorvoegsel);
+          3. automatisch: de timer is uitgeschakeld (geen volgende run), de eigen dienst staat bewust uit, of alles waar
+             de naam bij hoort staat bewust uit en er draait daar niets meer van. "nex-backup" bij tientallen nex-diensten
+             die nog draaien blijft dus gewoon bewaakt.
+        Het item krijgt state "parked" (zodat oudere apps het grijs tonen, zonder "mislukt"), de echte toestand staat in
+        state_raw, en de reden staat vooraan in description.
+        """
+        cfg = self.settings()
+        app = self.store.items()
+        svc = services or []
+        ctr = containers or []
+        by_service = {str(s.get("name", "")): s for s in svc}
+        projects: dict[str, list[dict[str, Any]]] = {}
+        for c in ctr:
+            proj = c.get("project")
+            if proj and proj != "los":
+                projects.setdefault(str(proj).lower(), []).append(c)
+        targets: list[tuple[str, bool]] = []  # (naam, bewust uit)
+        for s in svc:
+            targets.append((_stem(str(s.get("name", ""))).lower(), bool(s.get("parked"))))
+        for c in ctr:
+            if not c.get("project") or c.get("project") == "los":
+                targets.append((str(c.get("name", "")).lower(), bool(c.get("parked"))))
+        for proj, items in projects.items():
+            targets.append((proj, all(bool(c.get("parked")) for c in items)))
+
+        out = []
+        for b in backups or []:
+            item = dict(b)
+            if b.get("kind", "job") != "job":
+                out.append(item)
+                continue
+            name = str(b.get("name", ""))
+            unit = str(b.get("unit") or (name + ".service" if b.get("source") == "timer" else ""))
+            names = {"backup": name.lower()}
+            if unit:
+                names["service"] = _stem(unit).lower()
+            setting = app.get(f"backup:{name}", {})
+            p_setting = setting.get("parked") if isinstance(setting.get("parked"), bool) else None
+            own = by_service.get(unit) if unit else None
+            if own is None and unit:
+                own = by_service.get(_stem(unit))
+            rule: str | None = None
+            if p_setting is True or (own is not None and own.get("parked_reason") == "app"):
+                rule = "app"
+            elif match_any(cfg["parked_rx"], "backup", names):
+                rule = "config"
+            elif cfg["auto_parked"]:
+                if b.get("source") == "timer" and b.get("next_at") == 0:
+                    rule = "timer_off"
+                elif own is not None and own.get("parked"):
+                    rule = own.get("parked_reason") or "target"
+                else:
+                    stem = backup_stem(name)
+                    own_stem = _stem(unit).lower() if unit else ""
+                    hits = [p for t, p in targets if t != own_stem and _related(stem, t)] if len(stem) >= 3 else []
+                    if hits and all(hits):
+                        rule = "target"
+            parked = p_setting is not False and rule is not None and _backup_problem(b, default_max_age)
+            item.update(parked=parked, parked_reason=rule if parked else None, parked_setting=p_setting, parked_rule=rule)
+            if parked:
+                nl, en = BACKUP_REASONS.get(rule or "", BACKUP_REASONS["target"])
+                label = L(f"Bewust uit ({nl})", f"Switched off ({en})")
+                desc = str(b.get("description") or "")
+                item.update(state="parked", state_raw=b.get("state"), description=f"{label} · {desc}" if desc else label)
+                item.pop("max_age_seconds", None)
+            out.append(item)
+        return out
+
     # Eén item, voor het antwoord op een wijziging ------------------------------------------
 
     def validate_group(self, group: str | None) -> str | None:
@@ -409,6 +511,16 @@ class Labels:
         if not GROUP_RE.match(g):
             raise ValueError("ongeldige categorie")
         return g
+
+
+def _backup_problem(b: dict[str, Any], default_max_age: int) -> bool:
+    """Zou deze back-up nu een waarschuwing geven? Enkel dan heeft bewust uit zin."""
+    if b.get("kind", "job") != "job":
+        return False
+    state = b.get("state")
+    if state in ("failed", "empty", "no_access"):
+        return True
+    return state == "ok" and (b.get("age_seconds") or 0) > (b.get("max_age_seconds") or default_max_age)
 
 
 def parked_keys(services: list[dict[str, Any]], containers: list[dict[str, Any]], sites: list[dict[str, Any]]) -> set[str]:

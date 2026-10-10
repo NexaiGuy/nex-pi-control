@@ -83,6 +83,8 @@ def compute_health(
         for s in sites:
             if s.get("tls_days_left") is not None and s["tls_days_left"] < 14:
                 add("warning", "tls", L(f"TLS van {s['hostname']} vervalt over {s['tls_days_left']} dagen", f"TLS for {s['hostname']} expires in {s['tls_days_left']} days"), s["hostname"])
+    # Back-ups van wat bewust uit staat (labels.annotate_backups) tellen ook niet.
+    backups = [b for b in backups or [] if not b.get("parked")]
     if backups:
         # Enkel terugkerende back-ups (kind "job"); eenmalige kopieën en genegeerde mappen geven nooit een waarschuwing.
         old = [b for b in backups if b.get("kind", "job") == "job" and b.get("state") == "ok"
@@ -116,7 +118,8 @@ def counts(services, containers, sites, backups) -> dict[str, Any]:
     c = [x for x in c_all if not x.get("parked")]
     st = [x for x in st_all if not x.get("parked")]
     newest = None
-    jobs = [b for b in backups or [] if b.get("kind", "job") == "job"]
+    jobs_all = [b for b in backups or [] if b.get("kind", "job") == "job"]
+    jobs = [b for b in jobs_all if not b.get("parked")]
     for b in jobs:
         if b.get("state") == "ok" and (newest is None or b["age_seconds"] < newest):
             newest = b["age_seconds"]
@@ -134,7 +137,7 @@ def counts(services, containers, sites, backups) -> dict[str, Any]:
                   "warning": sum(1 for x in st if x.get("state") == "warning"), "total": len(st),
                   "parked": len(st_all) - len(st), "all": len(st_all)},
         "last_backup_age_seconds": newest,
-        "backups": {"failed": failed, "old": old, "total": len(jobs)},
+        "backups": {"failed": failed, "old": old, "total": len(jobs), "parked": len(jobs_all) - len(jobs), "all": len(jobs_all)},
     }
 
 

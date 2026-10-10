@@ -198,12 +198,18 @@ class RealBackend:
     def _labeled(self, services, containers, sites, with_groups: bool = True):
         return self.labels.annotate(services, containers, sites, self.services_c.unit_paths, self._port_registry(), with_groups)
 
+    def _labeled_backups(self, backups, services, containers):
+        """Back-ups van wat bewust uit staat (labels.annotate_backups). Na de cache: een wijziging in de app telt meteen."""
+        return self.labels.annotate_backups(backups, services, containers, self.config.backup_policy()["max_age_seconds"])
+
     def labels_info(self) -> dict[str, Any]:
         cfg = self.labels.settings()
         return {"groups": self.labels.group_names(), "auto_parked": cfg["auto_parked"], "editable": self.config.allow("labels")}
 
     async def labels_set(self, kind: str, name: str, changes: dict[str, Any]) -> dict[str, Any]:
-        if kind not in KINDS:
+        if kind not in KINDS and kind != "backup":
+            raise api_error(422, "invalid_input", "Ongeldige invoer")
+        if kind == "backup" and "group" in changes:
             raise api_error(422, "invalid_input", "Ongeldige invoer")
         if not self.config.allow("labels"):
             raise api_error(403, "forbidden", L("Categorieën en bewust uit staan uit in allowed-actions.yml", "Categories and switched off are disabled in allowed-actions.yml"))
@@ -211,6 +217,8 @@ class RealBackend:
             known = {s["name"] for s in self._services_snapshot or await self.services_c.list()}
         elif kind == "container":
             known = {c["name"] for c in self.containers_c.cached()["containers"]}
+        elif kind == "backup":
+            known = {b["name"] for b in await self._backups() if b.get("kind", "job") == "job"}
         else:
             known = set(self.sites_c.results)
         if name not in known:
@@ -238,7 +246,7 @@ class RealBackend:
             "gpio_available": self.gpio.available,
             "shell_url": self.settings.shell_url,
             "access_configured": bool(self.settings.team_domain and self.settings.aud),
-            "features": ["events", "updates", "agent_update", "container_restart", "labels"],
+            "features": ["events", "updates", "agent_update", "container_restart", "labels", "backup_labels"],
         }
 
     async def _backups(self) -> list[dict[str, Any]]:
@@ -261,7 +269,7 @@ class RealBackend:
         smart = self.smart.read_all()
         services, containers, sites = self._labeled(self._services_snapshot or await self.services_c.list(),
                                                     self.containers_c.cached()["containers"], list(self.sites_c.results.values()), with_groups=False)
-        backups = await self._backups()
+        backups = self._labeled_backups(await self._backups(), services, containers)
         return {
             "ts": int(time.time()),
             "health": compute_health(snap, m, smart, services, containers, sites, backups),
@@ -331,7 +339,9 @@ class RealBackend:
         return self.processes_c.collector.list(sort=sort, limit=limit, query=q)
 
     async def backups(self) -> list[dict[str, Any]]:
-        return await self._backups()
+        services, containers, _ = self._labeled(self._services_snapshot or await self.services_c.list(),
+                                                self.containers_c.cached()["containers"], [], with_groups=False)
+        return self._labeled_backups(await self._backups(), services, containers)
 
     def ports(self) -> dict[str, Any]:
         return misc.ports(self.settings.ports_file)

@@ -76,7 +76,7 @@ def test_backup_counts_report_failed_and_old():
              {"name": "b", "kind": "job", "source": "timer", "state": "ok", "age_seconds": 3600, "max_age_seconds": 36 * 3600},
              {"name": "c", "kind": "job", "source": "dir", "state": "ok", "age_seconds": 50 * 3600, "max_age_seconds": 36 * 3600}]
     c = counts([], [], [], items)
-    assert c["backups"] == {"failed": 1, "old": 1, "total": 3}
+    assert c["backups"] == {"failed": 1, "old": 1, "total": 3, "parked": 0, "all": 3}
     assert c["last_backup_age_seconds"] == 3600
 
 
